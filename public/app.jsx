@@ -304,6 +304,8 @@ function LogEntry({ e, animate, withAvatar = true }) {
     e.tag === "ARCHIVE"   ? "muted" :
     (e.tag === "THOUGHT" || e.tag === "DECISION" || e.tag === "DIRECTIVE") ? "cent" :
     e.tag === "LAUNCH"    ? "dev" :
+    e.tag === "HIRE"      ? "dev" :
+    e.tag === "BOOT" || e.tag === "PLAN" ? "dev" :
     "muted";
   return (
     <div className={"log-line" + (animate ? " fade-in" : "")}>
@@ -705,7 +707,7 @@ function App() {
     content = <CastPage projectsTick={projects.tick} />;
   } else if (path.startsWith("/node/")) {
     const id = path.replace("/node/", "");
-    content = <NodeDetailPage id={id} entries={log.entries} now={now} projects={projects} />;
+    content = <NodeDetailPage id={id} entries={log.entries} now={now} projects={projects} store={log} />;
   } else if (path === "/admin") {
     content = <AdminPage store={log} projects={projects} />;
   } else if (path === "/manifest") {

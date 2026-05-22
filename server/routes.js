@@ -18,7 +18,7 @@ import {
 import { isAlchemyConfigured } from "./metrics.js";
 import { publicUrl } from "./upload.js";
 import { pairSpawnUpload, agentSpawnUpload } from "./spawn-upload.js";
-import { generateCentralMessage, isAiConfigured } from "./ai.js";
+import { generateCentralMessage, generateEntityMessage, isAiConfigured } from "./ai.js";
 
 const ADMIN_TOKEN_KEY = "admin_token";
 
@@ -80,15 +80,22 @@ export function createApiRouter() {
 
   api.post("/admin/generate", requireAdmin, async (req, res) => {
     try {
-      const { brief, tag, target } = req.body || {};
+      const { brief, tag, target, src } = req.body || {};
       if (!brief?.trim()) {
         return res.status(400).json({ error: "brief is required" });
       }
-      const result = await generateCentralMessage({
-        brief: brief.trim(),
-        tag: tag || "THOUGHT",
-        target: target || "ALL",
-      });
+      const entitySrc = src?.trim();
+      const result = entitySrc && entitySrc.toUpperCase() !== "CENTRAL"
+        ? await generateEntityMessage({
+            brief: brief.trim(),
+            tag: tag || "THOUGHT",
+            src: entitySrc,
+          })
+        : await generateCentralMessage({
+            brief: brief.trim(),
+            tag: tag || "THOUGHT",
+            target: target || "ALL",
+          });
       res.json(result);
     } catch (err) {
       console.error("[ai]", err);

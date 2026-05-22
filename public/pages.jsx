@@ -316,7 +316,7 @@ function ImageUploadField({ label, file, onFile, previewUrl }) {
   );
 }
 
-function NodeDetailPage({ id, entries, now, projects }) {
+function NodeDetailPage({ id, entries, now, projects, store }) {
   if (id === "CENTRAL") return <CentralNodeDetail entries={entries} />;
   if (id === "DISPATCH") return <DispatchNodeDetail entries={entries} />;
   const p = NN.findProject(id);
@@ -325,10 +325,10 @@ function NodeDetailPage({ id, entries, now, projects }) {
     if (k.startsWith("TKN-") || k === (p.tokenId || "").toUpperCase()) {
       return <TokenNodeDetail project={p} entries={entries} projects={projects} />;
     }
-    return <DevNodeDetail project={p} entries={entries} projects={projects} />;
+    return <DevNodeDetail project={p} entries={entries} projects={projects} store={store} />;
   }
   const agent = NN.findAgent(id);
-  if (agent) return <AgentNodeDetail agent={agent} entries={entries} />;
+  if (agent) return <AgentNodeDetail agent={agent} entries={entries} store={store} />;
   return (
     <div className="wrap" style={{padding:"60px 32px"}}>
       <div className="muted up small">// not found</div>
@@ -409,7 +409,101 @@ function DispatchNodeDetail({ entries }) {
   );
 }
 
-function AdminHirePanel({ project, projects }) {
+/** Admin-only AI brief + inject, fixed to one entity (dev brain or contractor). */
+function EntityAdminPanel({ store, src, title, hint, headerVisual }) {
+  const isAdmin = useIsAdmin();
+  const [brief, setBrief] = _us("");
+  const [thought, setThought] = _us("");
+  const [flash, setFlash] = _us(null);
+  const [aiBusy, setAiBusy] = _us(false);
+  const [aiErr, setAiErr] = _us("");
+  const [aiEnabled, setAiEnabled] = _us(false);
+  const [serverOnline, setServerOnline] = _us(false);
+  const [hasToken, setHasToken] = _us(false);
+
+  _ue(() => {
+    const API = window.NETWORK_API;
+    if (!API) return;
+    API.probe().then((cfg) => {
+      setServerOnline(!!cfg);
+      setAiEnabled(!!cfg?.aiEnabled);
+      setHasToken(!!sessionStorage.getItem(API.TOKEN_KEY));
+    });
+  }, []);
+
+  if (!isAdmin || !store) return null;
+
+  async function generateWithAi(e) {
+    e && e.preventDefault();
+    if (!brief.trim() || aiBusy) return;
+    const API = window.NETWORK_API;
+    if (!API?.isOnline()) { setAiErr("BACKEND OFFLINE."); return; }
+    if (!sessionStorage.getItem(API.TOKEN_KEY)) { setAiErr("RE-LOGIN REQUIRED."); return; }
+    if (!aiEnabled) { setAiErr("NO ANTHROPIC KEY ON SERVER."); return; }
+    setAiBusy(true);
+    setAiErr("");
+    try {
+      const result = await API.generate({ brief: brief.trim(), tag: "THOUGHT", src });
+      setThought(result.msg);
+      setFlash("DRAFT READY.");
+      setTimeout(() => setFlash(null), 2200);
+    } catch (ex) {
+      setAiErr(ex.message === "unauthorized" ? "SESSION EXPIRED." : (ex.message || "FAILED"));
+    } finally {
+      setAiBusy(false);
+    }
+  }
+
+  function inject(e) {
+    e && e.preventDefault();
+    if (!thought.trim()) return;
+    store.inject({ src, tag: "THOUGHT", msg: thought.trim(), public: true });
+    setFlash("INJECTED.");
+    setTimeout(() => setFlash(null), 1800);
+    setThought("");
+  }
+
+  return (
+    <div style={{ marginTop: 18 }}>
+      {flash && (
+        <div className="pill live" style={{ marginBottom: 12 }}>
+          <span className="blob"></span>{flash}
+        </div>
+      )}
+      <form onSubmit={generateWithAi} className="card" style={{ marginBottom: 14, borderColor: "rgba(142,255,193,0.2)" }}>
+        <span className="card-tag">// AI brief · {title}</span>
+        <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 12 }}>
+          {headerVisual}
+          <div className="muted small" style={{ lineHeight: 1.6, fontSize: 11 }}>{hint}</div>
+        </div>
+        <div className="tiny up muted" style={{ marginBottom: 10, letterSpacing: "0.12em" }}>
+          posts as [{src}] · THOUGHT only · admin only
+        </div>
+        <label className="field-label">operator brief</label>
+        <textarea value={brief} onChange={e => { setBrief(e.target.value); setAiErr(""); }}
+          placeholder="what should this node consider right now?" />
+        {aiErr && <div className="err small" style={{ marginTop: 10 }}>{aiErr}</div>}
+        <button type="submit" className="btn btn-block swap" style={{ marginTop: 14, borderColor: "var(--accent-dim)", color: "var(--accent)" }}
+          disabled={!brief.trim() || aiBusy || !serverOnline || !hasToken}>
+          [ {aiBusy ? "GENERATING…" : "GENERATE WITH AI"} ]
+        </button>
+      </form>
+
+      <form onSubmit={inject} className="card" style={{ borderColor: "rgba(142,255,193,0.2)" }}>
+        <span className="card-tag">// inject · {src}</span>
+        <label className="field-label">message (THOUGHT)</label>
+        <textarea value={thought} onChange={e => setThought(e.target.value)}
+          placeholder="terse line as it will appear in the console." />
+        <button type="submit" className="btn btn-accent btn-block swap" style={{ marginTop: 14 }}
+          disabled={!thought.trim()}>
+          [ INJECT ]
+        </button>
+      </form>
+    </div>
+  );
+}
+
+function AdminHirePanel({ project, projects, store }) {
   const isAdmin = useIsAdmin();
   const [hiring, setHiring] = _us(null);
   const [img, setImg] = _us(null);
@@ -417,6 +511,7 @@ function AdminHirePanel({ project, projects }) {
   const [ok, setOk] = _us("");
   if (!isAdmin || !projects?.hireAgent) return null;
   const key = project.tokenId || project.id;
+  const p = NN.normalizeProject(project);
 
   async function hire(type) {
     if (!img) { setErr("upload an image for this contractor"); return; }
@@ -426,8 +521,17 @@ function AdminHirePanel({ project, projects }) {
       const fd = new FormData();
       fd.append("type", type);
       fd.append("image", img);
-      await projects.hireAgent(key, fd);
-      setOk(`${type.toUpperCase()} hired.`);
+      const agent = await projects.hireAgent(key, fd);
+      const label = (window.AVATAR_TYPES?.[type]?.label || type.toUpperCase());
+      if (store && p.devId) {
+        store.inject({
+          src: p.devId,
+          tag: "HIRE",
+          msg: `HIRE ${agent?.name || label} — ${label} contractor retained for ${p.codename}.`,
+          public: true,
+        });
+      }
+      setOk(`${label} hired · logged.`);
       setImg(null);
       setTimeout(() => setOk(""), 2400);
     } catch (ex) {
@@ -468,7 +572,7 @@ function AdminHirePanel({ project, projects }) {
   );
 }
 
-function TokenNodeDetail({ project, entries, projects }) {
+function TokenNodeDetail({ project, entries, projects, store }) {
   const p = useLiveProject(project, projects?.tick);
   const own = entries.filter(e =>
     e.src === p.tokenId || e.src === p.devId || e.src === p.id ||
@@ -516,7 +620,7 @@ function TokenNodeDetail({ project, entries, projects }) {
             </div>
           </div>
 
-          <AdminHirePanel project={p} projects={projects} />
+          <AdminHirePanel project={p} projects={projects} store={store} />
 
           <div className="card" style={{marginBottom:18}}>
             <span className="card-tag">parameters</span>
@@ -581,7 +685,7 @@ function TokenNodeDetail({ project, entries, projects }) {
   );
 }
 
-function DevNodeDetail({ project, entries, projects }) {
+function DevNodeDetail({ project, entries, projects, store }) {
   const p = useLiveProject(project, projects?.tick);
   const dev = NN.devAgentFor(p);
   const balSpark = _um(() => metricSpark(p.balance, 1), [p.balance, p.devId]);
@@ -613,7 +717,7 @@ function DevNodeDetail({ project, entries, projects }) {
             <span className="card-tag">brief on boot</span>
             <div style={{ fontFamily: "var(--serif)", fontSize: 18, lineHeight: 1.5 }}>"{p.thesis}"</div>
           </div>
-          <div className="card">
+          <div className="card" style={{ marginBottom: 18 }}>
             <span className="card-tag">parameters</span>
             <dl className="kv" style={{ marginTop: 4 }}>
               <dt>dev id</dt>           <dd className="dev">{p.devId}</dd>
@@ -623,6 +727,13 @@ function DevNodeDetail({ project, entries, projects }) {
               <dt>mint</dt>              <dd style={{ wordBreak: "break-all" }}>{p.tokenMint || "—"}</dd>
             </dl>
           </div>
+          <EntityAdminPanel
+            store={store}
+            src={p.devId}
+            title={p.devId}
+            hint={`draft and inject THOUGHT lines as ${p.devId} — operator voice for this developer brain.`}
+            headerVisual={<Avatar agent={dev} size={56} frame={true} label={false} imageSrc={p.devImage} />}
+          />
         </div>
         <div>
           <MetricHero
@@ -647,7 +758,7 @@ function DevNodeDetail({ project, entries, projects }) {
   );
 }
 
-function AgentNodeDetail({ agent, entries }) {
+function AgentNodeDetail({ agent, entries, store }) {
   const parent = NN.projectOfAgent(agent.id);
   const own = entries.filter(e => e.src === agent.id);
   const t = window.AVATAR_TYPES[agent.type];
@@ -681,6 +792,13 @@ function AgentNodeDetail({ agent, entries }) {
           <div className="muted small" style={{marginTop:18, lineHeight:1.7, fontSize:11.5}}>
             Agents do one job each, then go quiet. Type encodes color; the small detail on the body is the job-tell. Figures are collected per spawn; the set grows as the network spawns more.
           </div>
+          <EntityAdminPanel
+            store={store}
+            src={agent.id}
+            title={agent.name}
+            hint={`draft and inject THOUGHT lines as ${agent.id} — in-character for this ${t.label} contractor.`}
+            headerVisual={<Avatar agent={agent} size={56} frame={true} label={false} imageSrc={agent.imageUrl} />}
+          />
         </div>
 
         <div className="card" style={{padding:0}}>

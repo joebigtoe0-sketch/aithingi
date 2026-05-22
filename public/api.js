@@ -109,10 +109,10 @@
       return request("/log/" + encodeURIComponent(id), { method: "DELETE" });
     },
 
-    async generate({ brief, tag, target }) {
+    async generate({ brief, tag, target, src }) {
       return request("/admin/generate", {
         method: "POST",
-        body: JSON.stringify({ brief, tag, target }),
+        body: JSON.stringify({ brief, tag, target, src }),
       });
     },
   };

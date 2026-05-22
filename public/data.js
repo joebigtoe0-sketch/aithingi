@@ -193,7 +193,10 @@ function srcColor(src) {
 function srcAgent(src) {
   if (src === "CENTRAL") return CENTRAL;
   if (src === "DISPATCH") return DISPATCH;
-  if (src.startsWith("DEV-")) return null;
+  if (src.startsWith("DEV-")) {
+    const p = findProject(src);
+    if (p) return devAgentFor(p);
+  }
   return findAgent(src);
 }
 
