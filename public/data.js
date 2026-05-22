@@ -55,24 +55,6 @@ function nextTokenId(projects) {
   return "TKN-" + String(nextDevNumberFrom(projects || PROJECTS)).padStart(3, "0");
 }
 
-function normalizeProject(p) {
-  if (!p) return p;
-  const rawId = p.id || "";
-  let devId = p.devId || null;
-  let tokenId = p.tokenId || null;
-  if (rawId.startsWith("DEV-") && !devId) devId = rawId;
-  if (rawId.startsWith("TKN-") && !tokenId) tokenId = rawId;
-  const numMatch = (devId || tokenId || rawId).match(/(\d+)/);
-  const pad = numMatch ? String(parseInt(numMatch[1], 10)).padStart(3, "0") : "001";
-  devId = devId || "DEV-" + pad;
-  tokenId = tokenId || "TKN-" + pad;
-  return Object.assign({}, p, {
-    devId,
-    tokenId,
-    agents: p.agents || [],
-  });
-}
-
 function loadProjectsLocal() {
   try {
     const raw = localStorage.getItem(PROJECTS_KEY);
@@ -85,14 +67,31 @@ function saveProjectsLocal(arr) {
   localStorage.setItem(PROJECTS_KEY, JSON.stringify(arr));
 }
 
-function replaceProjects(list) {
-  PROJECTS.splice(0, PROJECTS.length, ...(list || []));
-}
-
 function normalizeProject(p) {
   if (!p) return p;
+  const rawId = String(p.id || "");
+  let devId = p.devId || p.dev_id || null;
+  let tokenId = p.tokenId || p.token_id || null;
+  const tokenImage = p.tokenImage || p.token_image || null;
+  const devImage = p.devImage || p.dev_image || null;
+  if (rawId.startsWith("DEV-") && !devId) devId = rawId;
+  if (rawId.startsWith("TKN-") && !tokenId) tokenId = rawId;
+  const numMatch = (devId || tokenId || rawId).match(/(\d+)/);
+  const pad = numMatch ? String(parseInt(numMatch[1], 10)).padStart(3, "0") : "001";
+  devId = devId || "DEV-" + pad;
+  tokenId = tokenId || "TKN-" + pad;
   const agents = p.agents || p.subagents || [];
-  return Object.assign({}, p, { agents });
+  return Object.assign({}, p, {
+    devId,
+    tokenId,
+    tokenImage,
+    devImage,
+    agents: Array.isArray(agents) ? agents : [],
+  });
+}
+
+function replaceProjects(list) {
+  PROJECTS.splice(0, PROJECTS.length, ...(list || []).map(normalizeProject));
 }
 
 const SEED_LINES = [];
@@ -148,7 +147,11 @@ function findAgent(id) {
 }
 function findProject(id) {
   const k = (id || "").toUpperCase();
-  return PROJECTS.find((p) => p.id === k || p.tokenId === k || p.devId === k);
+  const hit = PROJECTS.find((p) => {
+    const n = normalizeProject(p);
+    return n.id === k || n.tokenId === k || n.devId === k;
+  });
+  return hit ? normalizeProject(hit) : null;
 }
 function projectOfAgent(agentId) {
   for (const p of PROJECTS) {
@@ -158,12 +161,14 @@ function projectOfAgent(agentId) {
 }
 function devAgentFor(project) {
   const p = normalizeProject(project);
+  const devId = p.devId || "DEV-001";
+  const codename = p.codename || "DEV";
   return {
-    id: p.devId,
+    id: devId,
     type: "dev",
-    num: p.devId.replace("DEV-", ""),
-    name: p.codename + " BRAIN",
-    seed: (p.codename.charCodeAt(0) || 1) + parseInt(p.devId.replace(/\D/g, "") || 1, 10),
+    num: devId.replace(/^DEV-/, ""),
+    name: codename + " BRAIN",
+    seed: (codename.charCodeAt(0) || 1) + parseInt(devId.replace(/\D/g, "") || "1", 10),
     imageUrl: p.devImage || null,
   };
 }

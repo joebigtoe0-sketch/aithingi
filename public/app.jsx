@@ -355,7 +355,7 @@ function BubbleMap({ entries, now, projectsTick }) {
     return set;
   }, [entries, now]);
 
-  const tokens = N.PROJECTS; // projectsTick forces re-render when list changes
+  const tokens = N.PROJECTS.map(N.normalizeProject); // projectsTick forces re-render when list changes
   void projectsTick;
 
   const resetView = useCallback(() => {
@@ -607,18 +607,19 @@ function BubbleMap({ entries, now, projectsTick }) {
 
               {tokens.map((p, i) => {
                 const dp = p.__devPos;
-                if (!dp) return null;
+                const devId = p.devId;
+                if (!dp || !devId) return null;
                 const dev = N.devAgentFor(p);
                 return (
                   <BubbleNode
-                    key={p.devId}
+                    key={devId}
                     x={dp.x} y={dp.y} size={72}
                     cls="dev"
-                    to={"/node/" + p.devId}
-                    inner={<Avatar agent={dev} size={72} frame={false} />}
-                    label={p.devId}
+                    to={"/node/" + devId}
+                    inner={<Avatar agent={dev} size={72} frame={false} imageSrc={p.devImage} />}
+                    label={devId}
                     name={p.codename}
-                    active={recentlyActive.has(p.devId)}
+                    active={recentlyActive.has(devId)}
                     style={{animationDelay: (i * 0.6 + 0.2) + "s"}}
                   />
                 );
