@@ -64,6 +64,7 @@ On the **web service** → **Variables**, set:
 | Variable | Required | Notes |
 |----------|----------|--------|
 | `ANTHROPIC_API_KEY` | Yes | From [Anthropic console](https://console.anthropic.com/) |
+| `ALCHEMY_API_KEY` | Yes (live metrics) | [Alchemy](https://dashboard.alchemy.com/) — Solana app, mainnet key for dev wallet balances |
 | `ADMIN_PASSWORD` | Yes | Admin login for `#/admin` — use a strong value, not `central` |
 | `DATABASE_URL` | Yes (prod) | Reference from Postgres plugin (step 3) |
 | `ANTHROPIC_MODEL` | No | Default: `claude-sonnet-4-20250514` |
@@ -82,7 +83,7 @@ Railway sets `PORT` automatically — do not override it.
 After deploy, check:
 
 - `https://YOUR-DOMAIN.up.railway.app/api/health`  
-  Should return: `{"ok":true,"database":"postgres","ai":true}`
+  Should return: `{"ok":true,"database":"postgres","ai":true,"metrics":true}`
 
 ---
 

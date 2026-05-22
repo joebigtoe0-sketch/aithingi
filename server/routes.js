@@ -11,8 +11,11 @@ import {
   getNextPairNumber,
   addProjectAgent,
   findProjectByKey,
+  syncProjectMetrics,
+  syncAllProjectMetrics,
   hasDatabase,
 } from "./db.js";
+import { isAlchemyConfigured } from "./metrics.js";
 import { publicUrl } from "./upload.js";
 import { pairSpawnUpload, agentSpawnUpload } from "./spawn-upload.js";
 import { generateCentralMessage, isAiConfigured } from "./ai.js";
@@ -46,6 +49,7 @@ export function createApiRouter() {
       ok: true,
       database: hasDatabase() ? "postgres" : "memory",
       ai: isAiConfigured(),
+      metrics: isAlchemyConfigured(),
     });
   });
 
@@ -53,6 +57,7 @@ export function createApiRouter() {
     res.json({
       aiEnabled: isAiConfigured(),
       database: hasDatabase() ? "postgres" : "memory",
+      metricsEnabled: isAlchemyConfigured(),
     });
   });
 
@@ -102,13 +107,29 @@ export function createApiRouter() {
     }
   });
 
-  api.get("/projects", async (_req, res) => {
+  api.get("/projects", async (req, res) => {
     try {
-      const projects = await getProjects();
+      let projects = await getProjects();
+      const refresh = req.query.refresh !== "0";
+      if (refresh && projects.length) {
+        projects = await syncAllProjectMetrics(projects, { force: req.query.force === "1" });
+      }
       const nextDev = await getNextPairNumber();
       res.json({ projects, nextDev });
     } catch (err) {
       res.status(500).json({ error: "failed to load projects" });
+    }
+  });
+
+  api.post("/projects/:key/refresh-metrics", async (req, res) => {
+    try {
+      const project = await findProjectByKey(req.params.key);
+      if (!project) return res.status(404).json({ error: "project not found" });
+      const updated = await syncProjectMetrics(project, { force: true });
+      res.json({ project: updated });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: err.message || "metrics refresh failed" });
     }
   });
 
@@ -119,15 +140,17 @@ export function createApiRouter() {
     });
   }, async (req, res) => {
     try {
-      const { codename, ticker, budget, thesis } = req.body || {};
+      const { codename, ticker, budget, thesis, wallet, tokenMint } = req.body || {};
       if (!codename?.trim()) return res.status(400).json({ error: "codename required" });
       if (!thesis?.trim()) return res.status(400).json({ error: "brief required" });
+      if (!wallet?.trim()) return res.status(400).json({ error: "dev wallet address required" });
+      if (!tokenMint?.trim()) return res.status(400).json({ error: "token contract address required" });
       const tokenFile = req.files?.tokenImage?.[0];
       const devFile = req.files?.devImage?.[0];
       const tokenImage = tokenFile ? publicUrl("tokens", tokenFile.filename) : null;
       const devImage = devFile ? publicUrl("devs", devFile.filename) : null;
       const project = await createDeveloperProject({
-        codename, ticker, budget, thesis, tokenImage, devImage,
+        codename, ticker, budget, thesis, tokenImage, devImage, wallet, tokenMint,
       });
       const nextDev = await getNextPairNumber();
       res.status(201).json({ project, nextDev });

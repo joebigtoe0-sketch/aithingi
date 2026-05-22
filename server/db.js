@@ -3,6 +3,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import pg from "pg";
 import { PROJECTS, buildSeedLog } from "./seed.js";
+import { isValidSolanaAddress } from "./metrics.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -69,6 +70,8 @@ export function normalizeProject(p) {
     tokenId,
     tokenImage: p.tokenImage || p.token_image || null,
     devImage: p.devImage || p.dev_image || null,
+    tokenMint: p.tokenMint || p.token_mint || null,
+    metricsUpdatedAt: p.metricsUpdatedAt || (p.metrics_updated_at ? Number(p.metrics_updated_at) : null),
     agents: p.agents || parseAgents(p.subagents),
   };
 }
@@ -91,6 +94,8 @@ function rowToProject(r) {
     devId: r.dev_id,
     tokenImage: r.token_image,
     devImage: r.dev_image,
+    tokenMint: r.token_mint,
+    metricsUpdatedAt: r.metrics_updated_at ? Number(r.metrics_updated_at) : null,
   });
 }
 
@@ -113,6 +118,8 @@ function projectToDbRow(p) {
     n.devId,
     n.tokenImage,
     n.devImage,
+    n.tokenMint || null,
+    n.metricsUpdatedAt || null,
   ];
 }
 
@@ -121,6 +128,8 @@ async function migrateProjectColumns(client) {
   await client.query(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS dev_id TEXT`);
   await client.query(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS token_image TEXT`);
   await client.query(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS dev_image TEXT`);
+  await client.query(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS token_mint TEXT`);
+  await client.query(`ALTER TABLE projects ADD COLUMN IF NOT EXISTS metrics_updated_at BIGINT`);
   await client.query(`
     UPDATE projects SET
       dev_id = id,
@@ -196,19 +205,21 @@ export async function insertProject(project) {
     return memoryStore.projects.find((x) => x.id === row.id);
   }
   await p.query(
-    `INSERT INTO projects (id, codename, ticker, status, launched, wallet, balance, market_cap, holders, thesis, subagents, pumpfun, token_id, dev_id, token_image, dev_image)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
+    `INSERT INTO projects (id, codename, ticker, status, launched, wallet, balance, market_cap, holders, thesis, subagents, pumpfun, token_id, dev_id, token_image, dev_image, token_mint, metrics_updated_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)`,
     projectToDbRow(row)
   );
   const { rows } = await p.query("SELECT * FROM projects WHERE id = $1", [row.id]);
   return rows.length ? rowToProject(rows[0]) : rowToProject({ ...row, subagents: row.agents });
 }
 
-export async function createDeveloperProject({ codename, ticker, budget, thesis, tokenImage, devImage }) {
-  return createTokenPair({ codename, ticker, budget, thesis, tokenImage, devImage });
+export async function createDeveloperProject(opts) {
+  return createTokenPair(opts);
 }
 
-export async function createTokenPair({ codename, ticker, budget, thesis, tokenImage, devImage }) {
+export async function createTokenPair({
+  codename, ticker, budget, thesis, tokenImage, devImage, wallet, tokenMint,
+}) {
   const num = await getNextPairNumber();
   const pad = String(num).padStart(3, "0");
   const tokenId = "TKN-" + pad;
@@ -216,7 +227,14 @@ export async function createTokenPair({ codename, ticker, budget, thesis, tokenI
   const code = String(codename || "").trim().toUpperCase();
   if (!code) throw new Error("codename required");
   const tick = (ticker || "$" + code).trim();
-  const bal = Number(budget);
+  const w = String(wallet || "").trim();
+  const mint = String(tokenMint || "").trim();
+  if (!w) throw new Error("dev wallet address required");
+  if (!mint) throw new Error("token contract (mint) address required");
+
+  if (!isValidSolanaAddress(w)) throw new Error("invalid Solana wallet address");
+  if (!isValidSolanaAddress(mint)) throw new Error("invalid token mint address");
+
   const project = normalizeProject({
     id: tokenId,
     tokenId,
@@ -225,17 +243,62 @@ export async function createTokenPair({ codename, ticker, budget, thesis, tokenI
     ticker: tick.startsWith("$") ? tick : "$" + tick.replace(/^\$/, ""),
     status: "booting",
     launched: Date.now(),
-    wallet: makeWallet(),
-    balance: Number.isFinite(bal) ? bal : 2,
+    wallet: w,
+    tokenMint: mint,
+    balance: 0,
     marketCap: 0,
     holders: 0,
     thesis: String(thesis || "").trim(),
     agents: [],
-    pumpfun: null,
+    pumpfun: `https://pump.fun/coin/${mint}`,
     tokenImage: tokenImage || null,
     devImage: devImage || null,
   });
-  return insertProject(project);
+  const inserted = await insertProject(project);
+  return syncProjectMetrics(inserted, { force: true });
+}
+
+export async function updateProjectMetrics(projectKey, patch) {
+  const p = getPool();
+  const key = projectKey;
+  if (!p) {
+    const row = memoryStore.projects.find(
+      (x) => x.id === key || x.tokenId === key || x.devId === key
+    );
+    if (!row) throw new Error("project not found");
+    if (patch.balance != null) row.balance = patch.balance;
+    if (patch.marketCap != null) row.marketCap = patch.marketCap;
+    if (patch.holders != null) row.holders = patch.holders;
+    if (patch.metricsUpdatedAt != null) row.metricsUpdatedAt = patch.metricsUpdatedAt;
+    return normalizeProject(row);
+  }
+  await p.query(
+    `UPDATE projects SET
+      balance = COALESCE($1, balance),
+      market_cap = COALESCE($2, market_cap),
+      holders = COALESCE($3, holders),
+      metrics_updated_at = COALESCE($4, metrics_updated_at)
+     WHERE id = $5 OR token_id = $5 OR dev_id = $5`,
+    [
+      patch.balance ?? null,
+      patch.marketCap ?? null,
+      patch.holders ?? null,
+      patch.metricsUpdatedAt ?? null,
+      key,
+    ]
+  );
+  return findProjectByKey(key);
+}
+
+export async function syncProjectMetrics(project, { force = false } = {}) {
+  const { refreshProjectMetrics } = await import("./metrics.js");
+  const patch = await refreshProjectMetrics(project, { force });
+  if (!Object.keys(patch).length) return project;
+  return updateProjectMetrics(project.tokenId || project.id, patch);
+}
+
+export async function syncAllProjectMetrics(projects, { force = false } = {}) {
+  return Promise.all(projects.map((p) => syncProjectMetrics(p, { force }).catch(() => p)));
 }
 
 export async function updateProjectAgents(dbId, agents) {
@@ -305,8 +368,8 @@ async function seedDatabase(client) {
   }
   for (const p of PROJECTS) {
     await client.query(
-      `INSERT INTO projects (id, codename, ticker, status, launched, wallet, balance, market_cap, holders, thesis, subagents, pumpfun, token_id, dev_id, token_image, dev_image)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) ON CONFLICT (id) DO NOTHING`,
+      `INSERT INTO projects (id, codename, ticker, status, launched, wallet, balance, market_cap, holders, thesis, subagents, pumpfun, token_id, dev_id, token_image, dev_image, token_mint, metrics_updated_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18) ON CONFLICT (id) DO NOTHING`,
       projectToDbRow({ ...p, agents: p.agents || p.subagents || [] })
     );
   }

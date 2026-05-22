@@ -256,6 +256,54 @@ function useIsAdmin() {
     !!sessionStorage.getItem(window.NETWORK_API?.TOKEN_KEY || "network_admin_token");
 }
 
+function useLiveProject(project, projectsTick) {
+  const [live, setLive] = _us(() => NN.normalizeProject(project));
+  void projectsTick;
+  _ue(() => { setLive(NN.normalizeProject(project)); }, [project, projectsTick]);
+
+  _ue(() => {
+    const key = live.tokenId || live.id;
+    if (!key || !window.NETWORK_API?.isOnline()) return;
+    let cancelled = false;
+    async function pull() {
+      try {
+        const data = await window.NETWORK_API.refreshProjectMetrics(key);
+        if (!cancelled && data.project) setLive(NN.normalizeProject(data.project));
+      } catch (e) { /* keep last */ }
+    }
+    pull();
+    const t = setInterval(pull, 45000);
+    return () => { cancelled = true; clearInterval(t); };
+  }, [live.tokenId, live.devId]);
+
+  return live;
+}
+
+function metricSpark(seedValue, scale) {
+  const arr = [];
+  let v = (seedValue || 1) * (scale || 0.5) * 0.3 + 0.1;
+  for (let i = 0; i < 40; i++) {
+    v = Math.max(v * 0.02, v + (Math.random() - 0.48) * v * 0.12);
+    arr.push(v);
+  }
+  arr[arr.length - 1] = seedValue || 0;
+  return arr;
+}
+
+function MetricHero({ tag, value, sub, spark, color }) {
+  return (
+    <div className="card" style={{ marginBottom: 18 }}>
+      <span className="card-tag">{tag}</span>
+      <div style={{ fontSize: 28, fontVariantNumeric: "tabular-nums", marginTop: 4 }}>{value}</div>
+      {sub && <div className="muted small" style={{ marginTop: 6, lineHeight: 1.5 }}>{sub}</div>}
+      <div className="muted small" style={{ marginTop: 8, fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase" }}>
+        live · refreshes ~45s
+      </div>
+      <Sparkline data={spark} color={color || "var(--accent)"} />
+    </div>
+  );
+}
+
 function ImageUploadField({ label, file, onFile, previewUrl }) {
   const url = previewUrl || (file ? URL.createObjectURL(file) : null);
   return (
@@ -277,7 +325,7 @@ function NodeDetailPage({ id, entries, now, projects }) {
     if (k.startsWith("TKN-") || k === (p.tokenId || "").toUpperCase()) {
       return <TokenNodeDetail project={p} entries={entries} projects={projects} />;
     }
-    return <DevNodeDetail project={p} entries={entries} />;
+    return <DevNodeDetail project={p} entries={entries} projects={projects} />;
   }
   const agent = NN.findAgent(id);
   if (agent) return <AgentNodeDetail agent={agent} entries={entries} />;
@@ -421,22 +469,14 @@ function AdminHirePanel({ project, projects }) {
 }
 
 function TokenNodeDetail({ project, entries, projects }) {
-  const p = NN.normalizeProject(project);
+  const p = useLiveProject(project, projects?.tick);
   const own = entries.filter(e =>
     e.src === p.tokenId || e.src === p.devId || e.src === p.id ||
     (p.agents || []).some(a => a.id === e.src) ||
     (e.src === "CENTRAL" && e.msg.toLowerCase().includes(p.codename.toLowerCase()))
   );
-  const spark = _um(() => {
-    const arr = [];
-    let v = p.balance * 0.5 + 0.2;
-    for (let i = 0; i < 40; i++) {
-      v = Math.max(0.05, v + (Math.random() - 0.45) * 0.6);
-      arr.push(v);
-    }
-    arr[arr.length - 1] = p.balance;
-    return arr;
-  }, [p.id]);
+  const mcapSpark = _um(() => metricSpark(p.marketCap, 1 / 50000), [p.marketCap, p.tokenId]);
+  const mintShort = p.tokenMint ? (p.tokenMint.slice(0, 6) + "…" + p.tokenMint.slice(-4)) : "—";
 
   return (
     <div className="wrap-wide" style={{padding:"30px 32px 60px"}}>
@@ -486,10 +526,11 @@ function TokenNodeDetail({ project, entries, projects }) {
               <dt>codename</dt>          <dd>{p.codename}</dd>
               <dt>ticker</dt>            <dd>{p.ticker}</dd>
               <dt>status</dt>            <dd><span className={"pill " + p.status}><span className="blob"></span>{p.status}</span></dd>
-              <dt>wallet</dt>            <dd style={{wordBreak:"break-all"}}>{p.wallet}</dd>
-              <dt>balance</dt>           <dd>{NN.fmtBalance(p.balance)}</dd>
+              <dt>dev wallet</dt>         <dd style={{wordBreak:"break-all"}}>{p.wallet || "—"}</dd>
+              <dt>token mint</dt>         <dd style={{wordBreak:"break-all"}} className="dev">{p.tokenMint || "—"}</dd>
               <dt>market cap</dt>        <dd>{p.marketCap ? NN.fmtMcap(p.marketCap) : "—"}</dd>
               <dt>holders</dt>           <dd>{p.holders ? p.holders.toLocaleString() : "—"}</dd>
+              <dt>dev balance</dt>        <dd>{p.wallet ? NN.fmtBalance(p.balance) : "—"}</dd>
               <dt>launched</dt>          <dd>{new Date(p.launched).toISOString().replace(/\.\d{3}Z$/,"Z")}</dd>
               <dt>uptime</dt>            <dd style={{fontVariantNumeric:"tabular-nums"}}>{NN.uptimeStr(p.launched)}</dd>
             </dl>
@@ -513,16 +554,17 @@ function TokenNodeDetail({ project, entries, projects }) {
         </div>
 
         <div>
-          <div className="card" style={{marginBottom:18}}>
-            <span className="card-tag">balance</span>
-            <div style={{fontSize:28, fontVariantNumeric:"tabular-nums"}}>{NN.fmtBalance(p.balance)}</div>
-            <div className="muted small" style={{marginTop:4}}>last 40 ticks · simulated</div>
-            <Sparkline data={spark} color={p.status === "live" ? "var(--accent)" : p.status === "degraded" ? "var(--amber)" : "var(--muted)"} />
-          </div>
+          <MetricHero
+            tag="// market cap"
+            value={p.marketCap ? NN.fmtMcap(p.marketCap) : "—"}
+            sub={<>holders · <strong>{p.holders ? p.holders.toLocaleString() : "—"}</strong><br />mint · {mintShort}</>}
+            spark={mcapSpark}
+            color={p.status === "live" ? "var(--accent)" : p.status === "degraded" ? "var(--amber)" : "var(--muted)"}
+          />
 
           <div className="card" style={{padding:0}}>
             <div className="panel-h" style={{padding:"14px 18px", marginBottom:0}}>
-              <span className="panel-title">// scoped log · {p.id}</span>
+              <span className="panel-title">// scoped log · {p.tokenId}</span>
               <a className="muted tiny up swap" href="#/console"
                  onClick={(e)=>{e.preventDefault();window.navigate("/console");}}
                  style={{letterSpacing:"0.18em"}}>master →</a>
@@ -539,9 +581,10 @@ function TokenNodeDetail({ project, entries, projects }) {
   );
 }
 
-function DevNodeDetail({ project, entries }) {
-  const p = NN.normalizeProject(project);
+function DevNodeDetail({ project, entries, projects }) {
+  const p = useLiveProject(project, projects?.tick);
   const dev = NN.devAgentFor(p);
+  const balSpark = _um(() => metricSpark(p.balance, 1), [p.balance, p.devId]);
   const own = entries.filter(e =>
     e.src === p.devId || e.src === p.tokenId ||
     (p.agents || []).some(a => a.id === e.src) ||
@@ -564,17 +607,40 @@ function DevNodeDetail({ project, entries }) {
           </span>
         </div>
       </div>
-      <div className="card" style={{ marginTop: 24 }}>
-        <span className="card-tag">brief on boot</span>
-        <div style={{ fontFamily: "var(--serif)", fontSize: 18, lineHeight: 1.5 }}>"{p.thesis}"</div>
-      </div>
-      <div className="card" style={{ marginTop: 18, padding: 0 }}>
-        <div className="panel-h" style={{ padding: "14px 18px", marginBottom: 0 }}>
-          <span className="panel-title">// dev log · {p.devId}</span>
+      <div style={{ display: "grid", gridTemplateColumns: "1.5fr 1fr", gap: 22, marginTop: 18 }}>
+        <div>
+          <div className="card" style={{ marginBottom: 18 }}>
+            <span className="card-tag">brief on boot</span>
+            <div style={{ fontFamily: "var(--serif)", fontSize: 18, lineHeight: 1.5 }}>"{p.thesis}"</div>
+          </div>
+          <div className="card">
+            <span className="card-tag">parameters</span>
+            <dl className="kv" style={{ marginTop: 4 }}>
+              <dt>dev id</dt>           <dd className="dev">{p.devId}</dd>
+              <dt>wallet</dt>           <dd style={{ wordBreak: "break-all" }}>{p.wallet || "—"}</dd>
+              <dt>token</dt>             <dd><a className="cent swap" href={"#/node/" + p.tokenId}
+                onClick={(e) => { e.preventDefault(); window.navigate("/node/" + p.tokenId); }}>{p.tokenId}</a></dd>
+              <dt>mint</dt>              <dd style={{ wordBreak: "break-all" }}>{p.tokenMint || "—"}</dd>
+            </dl>
+          </div>
         </div>
-        <div className="log" style={{ padding: "14px 18px", maxHeight: 420, overflowY: "auto", fontSize: 11 }}>
-          {own.length === 0 ? <div className="muted small">no entries yet.</div> :
-            own.slice(-40).map(e => <LogEntry key={e.id} e={e} />)}
+        <div>
+          <MetricHero
+            tag="// wallet balance"
+            value={p.wallet ? NN.fmtBalance(p.balance) : "—"}
+            sub={p.wallet ? <>treasury · <span style={{ wordBreak: "break-all" }}>{p.wallet}</span></> : "no wallet on file"}
+            spark={balSpark}
+            color="var(--accent)"
+          />
+          <div className="card" style={{ padding: 0 }}>
+            <div className="panel-h" style={{ padding: "14px 18px", marginBottom: 0 }}>
+              <span className="panel-title">// dev log · {p.devId}</span>
+            </div>
+            <div className="log" style={{ padding: "14px 18px", maxHeight: 420, overflowY: "auto", fontSize: 11 }}>
+              {own.length === 0 ? <div className="muted small">no entries yet.</div> :
+                own.slice(-40).map(e => <LogEntry key={e.id} e={e} />)}
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -789,6 +855,8 @@ function AdminConsole({ store, projects }) {
   const [spawnTick, setSpawnTick] = _us("$");
   const [spawnBudget, setSpawnBudget] = _us("2.0");
   const [spawnBrief, setSpawnBrief] = _us("");
+  const [spawnWallet, setSpawnWallet] = _us("");
+  const [spawnMint, setSpawnMint] = _us("");
   const [spawnTokenImg, setSpawnTokenImg] = _us(null);
   const [spawnDevImg, setSpawnDevImg] = _us(null);
   const [spawnBusy, setSpawnBusy] = _us(false);
@@ -818,6 +886,11 @@ function AdminConsole({ store, projects }) {
       setTimeout(() => setFlash(null), 2800);
       return;
     }
+    if (!spawnWallet.trim() || !spawnMint.trim()) {
+      setFlash("WALLET + TOKEN MINT REQUIRED.");
+      setTimeout(() => setFlash(null), 2800);
+      return;
+    }
     setSpawnBusy(true);
     const code = spawnCode.toUpperCase();
     try {
@@ -826,6 +899,8 @@ function AdminConsole({ store, projects }) {
       fd.append("ticker", spawnTick);
       fd.append("budget", spawnBudget);
       fd.append("thesis", spawnBrief);
+      fd.append("wallet", spawnWallet.trim());
+      fd.append("tokenMint", spawnMint.trim());
       fd.append("tokenImage", spawnTokenImg);
       fd.append("devImage", spawnDevImg);
       const project = await projects.spawn(fd);
@@ -836,6 +911,7 @@ function AdminConsole({ store, projects }) {
       setTimeout(() => store.inject({ src:project.devId, tag:"PLAN", msg: `${spawnBrief.slice(0,140)}` }), 1600);
       setFlash(`${project.tokenId} + ${project.devId} SPAWNED.`);
       setSpawnCode(""); setSpawnTick("$"); setSpawnBudget("2.0"); setSpawnBrief("");
+      setSpawnWallet(""); setSpawnMint("");
       setSpawnTokenImg(null); setSpawnDevImg(null);
       setTimeout(() => setFlash(null), 2500);
     } catch (ex) {
@@ -882,6 +958,10 @@ function AdminConsole({ store, projects }) {
               <span className={aiEnabled ? "cent" : "err"}>ai · {aiEnabled ? "ready" : "no key"}</span>
               {" · "}
               <span className={hasToken ? "cent" : "err"}>auth · {hasToken ? "ok" : "re-login"}</span>
+              {" · "}
+              <span className={serverOnline && window.NETWORK_API?.getConfig()?.metricsEnabled ? "cent" : "err"}>
+                metrics · {serverOnline && window.NETWORK_API?.getConfig()?.metricsEnabled ? "alchemy" : "no key"}
+              </span>
             </div>
             <label className="field-label">operator brief</label>
             <textarea value={brief} onChange={e => { setBrief(e.target.value); setAiErr(""); }}
@@ -965,6 +1045,18 @@ function AdminConsole({ store, projects }) {
                 <input type="text" value={spawnBudget} onChange={e => setSpawnBudget(e.target.value)} />
               </div>
             </div>
+            <div className="row" style={{ marginTop: 12 }}>
+              <div>
+                <label className="field-label">dev wallet (Solana)</label>
+                <input type="text" value={spawnWallet} onChange={e => setSpawnWallet(e.target.value)}
+                  placeholder="base58 address…" style={{ fontSize: 11 }} />
+              </div>
+              <div>
+                <label className="field-label">token contract (mint)</label>
+                <input type="text" value={spawnMint} onChange={e => setSpawnMint(e.target.value)}
+                  placeholder="mint address…" style={{ fontSize: 11 }} />
+              </div>
+            </div>
             <div className="row" style={{ marginTop: 8 }}>
               <ImageUploadField label="token image" file={spawnTokenImg} onFile={setSpawnTokenImg} />
               <ImageUploadField label="developer brain image" file={spawnDevImg} onFile={setSpawnDevImg} />
@@ -973,7 +1065,7 @@ function AdminConsole({ store, projects }) {
             <textarea value={spawnBrief} onChange={e => setSpawnBrief(e.target.value)}
               placeholder="one paragraph. the brief is what the developer brain reads on boot." />
             <button type="submit" className="btn btn-block swap" style={{marginTop:18, borderColor:"var(--amber)", color:"var(--amber)"}}
-              disabled={!spawnCode || !spawnBrief || !spawnTokenImg || !spawnDevImg || spawnBusy}>
+              disabled={!spawnCode || !spawnBrief || !spawnWallet.trim() || !spawnMint.trim() || !spawnTokenImg || !spawnDevImg || spawnBusy}>
               [ {spawnBusy ? "SPAWNING…" : "SPAWN " + nextPairLabel} ]
             </button>
             <div className="muted tiny" style={{marginTop:10, letterSpacing:"0.16em", textTransform:"uppercase"}}>

@@ -26,7 +26,9 @@ CREATE TABLE IF NOT EXISTS projects (
   token_id TEXT,
   dev_id TEXT,
   token_image TEXT,
-  dev_image TEXT
+  dev_image TEXT,
+  token_mint TEXT,
+  metrics_updated_at BIGINT
 );
 
 CREATE TABLE IF NOT EXISTS settings (

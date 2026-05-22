@@ -70,8 +70,15 @@
       return request("/log");
     },
 
-    async fetchProjects() {
-      return request("/projects");
+    async fetchProjects(opts = {}) {
+      const q = opts.refresh === false ? "?refresh=0" : "?refresh=1";
+      return request("/projects" + q);
+    },
+
+    async refreshProjectMetrics(projectKey) {
+      return request("/projects/" + encodeURIComponent(projectKey) + "/refresh-metrics", {
+        method: "POST",
+      });
     },
 
     async spawnProject(formData) {

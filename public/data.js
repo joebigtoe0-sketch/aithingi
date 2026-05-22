@@ -74,6 +74,10 @@ function normalizeProject(p) {
   let tokenId = p.tokenId || p.token_id || null;
   const tokenImage = p.tokenImage || p.token_image || null;
   const devImage = p.devImage || p.dev_image || null;
+  const tokenMint = p.tokenMint || p.token_mint || null;
+  const balance = Number(p.balance) || 0;
+  const marketCap = p.marketCap != null ? Number(p.marketCap) : (p.market_cap != null ? Number(p.market_cap) : 0);
+  const holders = p.holders != null ? Number(p.holders) : 0;
   if (rawId.startsWith("DEV-") && !devId) devId = rawId;
   if (rawId.startsWith("TKN-") && !tokenId) tokenId = rawId;
   const numMatch = (devId || tokenId || rawId).match(/(\d+)/);
@@ -86,6 +90,11 @@ function normalizeProject(p) {
     tokenId,
     tokenImage,
     devImage,
+    tokenMint,
+    balance,
+    marketCap,
+    holders,
+    metricsUpdatedAt: p.metricsUpdatedAt || p.metrics_updated_at || null,
     agents: Array.isArray(agents) ? agents : [],
   });
 }
