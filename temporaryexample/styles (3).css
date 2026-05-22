@@ -407,13 +407,6 @@ pre.ascii .h-sub  { color: var(--azure); }
   background-image: radial-gradient(circle at 50% 35%, rgba(255,255,255,0.06), transparent 60%);
   pointer-events: none;
 }
-.figure-inner img {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-  display: block;
-  padding: 6%;
-}
 .figure-num {
   position: absolute;
   bottom: 6px; right: 8px;
@@ -446,78 +439,31 @@ pre.ascii .h-sub  { color: var(--azure); }
 }
 
 /* ============================================================
-   BUBBLE MAP — full viewport + pan/zoom
+   BUBBLE MAP
    ============================================================ */
-.page--map {
-  height: 100vh;
-  overflow: hidden;
-}
-.page--map .main--map {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
 .map-wrap {
   position: relative;
   width: 100%;
-  flex: 1;
-  min-height: 0;
+  height: calc(100vh - 60px - 60px);
+  min-height: 720px;
   overflow: hidden;
-  background: var(--bg);
-}
-.map-wrap.map-fullscreen {
-  height: 100%;
-  width: 100%;
-}
-
-.map-viewport {
-  position: absolute;
-  inset: 0;
-  overflow: hidden;
-  touch-action: none;
   background:
-    radial-gradient(ellipse at 50% 45%, #15151a 0%, var(--bg) 72%);
+    radial-gradient(ellipse at 50% 45%, #15151a 0%, var(--bg) 70%);
 }
-
-.map-world {
-  position: absolute;
-  top: 0;
-  left: 0;
-  will-change: transform;
-}
-
-/* drag surface sits behind nodes */
-.map-pan-surface {
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-  cursor: grab;
-}
-.map-pan-surface.is-dragging {
-  cursor: grabbing;
-}
-
 .map-grid {
   position: absolute; inset: 0;
   background-image:
-    linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px);
+    linear-gradient(rgba(255,255,255,0.015) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.015) 1px, transparent 1px);
   background-size: 56px 56px;
   pointer-events: none;
+  mask-image: radial-gradient(ellipse at center, black 30%, transparent 80%);
 }
 .map-canvas {
-  position: absolute;
-  inset: 0;
-  z-index: 1;
-  pointer-events: none;
+  position: absolute; inset: 0;
 }
 .map-stage {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
+  position: absolute; inset: 0;
 }
 .map-edges {
   position: absolute; inset: 0;
@@ -533,8 +479,7 @@ pre.ascii .h-sub  { color: var(--azure); }
   align-items: center; gap: 6px;
   cursor: pointer;
   animation: float 6s ease-in-out infinite;
-  z-index: 4;
-  pointer-events: auto;
+  z-index: 2;
 }
 .bubble:hover { z-index: 5; }
 .bubble .b-disc {
@@ -556,6 +501,7 @@ pre.ascii .h-sub  { color: var(--azure); }
   color: var(--muted);
   text-align: center;
   line-height: 1.4;
+  max-width: 110px;
   white-space: nowrap;
 }
 .bubble .b-name {
@@ -598,39 +544,21 @@ pre.ascii .h-sub  { color: var(--azure); }
   50%      { box-shadow: 0 6px 20px rgba(0,0,0,0.45), 0 0 0 4px rgba(142,255,193,0.05); }
 }
 
-/* HUD overlays — fixed to viewport, do not pan */
+/* legend / overlay panels on map */
 .map-overlay {
   position: absolute;
-  z-index: 12;
-  pointer-events: none;
-  background: rgba(19,19,21,0.88);
-  backdrop-filter: blur(8px);
+  z-index: 4;
+  background: rgba(19,19,21,0.85);
+  backdrop-filter: blur(6px);
   border: 1px solid var(--border);
   padding: 14px 16px;
   font-size: 11px;
   line-height: 1.65;
 }
-.map-overlay a,
-.map-overlay button {
-  pointer-events: auto;
-}
-.map-overlay.tl { top: 18px; left: 18px; max-width: min(360px, calc(100vw - 36px)); pointer-events: none; }
-.map-overlay.tl a { pointer-events: auto; }
-.map-overlay.tr { top: 18px; right: 18px; max-width: min(280px, calc(100vw - 36px)); }
-.map-overlay.br { bottom: 18px; right: 18px; max-width: min(320px, calc(100vw - 36px)); }
-.map-overlay.bl { bottom: 18px; left: 18px; }
-.map-nav-hint {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  flex-wrap: wrap;
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.16em;
-  color: var(--muted);
-  pointer-events: auto;
-}
-.map-nav-hint .btn { pointer-events: auto; }
+.map-overlay.tl { top: 22px; left: 22px; max-width: 360px; }
+.map-overlay.tr { top: 22px; right: 22px; max-width: 280px; }
+.map-overlay.br { bottom: 22px; right: 22px; max-width: 280px; }
+.map-overlay.bl { bottom: 22px; left: 22px; max-width: 460px; }
 
 .overlay-h {
   font-size: 10px; color: var(--muted);
@@ -881,15 +809,27 @@ pre.ascii .h-sub  { color: var(--azure); }
   .nav { gap: 16px; }
 }
 
+/* stack overlays vertically below ~1100px — the bubble radius reaches the corners */
 @media (max-width: 1100px) {
-  .map-overlay.tl { max-width: 240px; padding: 10px 12px; }
-  .welcome-h { font-size: 17px; }
-  .map-overlay.tr, .map-overlay.br { max-width: 200px; }
+  .map-overlay.tl, .map-overlay.tr, .map-overlay.bl, .map-overlay.br {
+    position: static;
+    max-width: none;
+    margin-bottom: 12px;
+    width: auto;
+  }
+  .map-wrap { height: auto; min-height: 0; padding-bottom: 24px; }
+  .map-canvas {
+    position: relative;
+    height: 600px;
+    inset: auto;
+  }
+  .map-stage, .map-edges {
+    position: absolute;
+    inset: 0;
+  }
 }
 @media (max-width: 768px) {
-  .map-overlay.tl { top: 10px; left: 10px; max-width: calc(100% - 20px); }
-  .map-overlay.tr { display: none; }
-  .map-nav-hint { bottom: 10px; left: 10px; }
+  .map-canvas { height: 520px; }
 }
 @media (max-width: 720px) {
   .wrap, .wrap-wide { padding: 0 18px; }

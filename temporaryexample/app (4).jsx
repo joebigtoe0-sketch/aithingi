@@ -29,48 +29,17 @@ function useNow(intervalMs = 1000) {
   return n;
 }
 
-/* ---------------- log store (local + API) ---------------- */
+/* ---------------- log store ---------------- */
 function useLogStore() {
   const [entries, setEntries] = useState(() => N.loadLog());
-  const [apiOnline, setApiOnline] = useState(false);
-  const API = window.NETWORK_API;
-
   useEffect(() => {
-    if (!API) return;
-    let cancelled = false;
-    (async () => {
-      const cfg = await API.probe();
-      if (cancelled || !cfg) return;
-      setApiOnline(true);
-      try {
-        const data = await API.fetchLog();
-        if (cancelled) return;
-        if (data.deployTs) localStorage.setItem("network_deploy_ts", String(data.deployTs));
-        setEntries(data.entries || []);
-      } catch (e) { /* keep local */ }
-    })();
-    return () => { cancelled = true; };
-  }, []);
-
-  useEffect(() => {
-    if (apiOnline && API) {
-      const poll = setInterval(async () => {
-        try {
-          const data = await API.fetchLog();
-          setEntries(data.entries || []);
-        } catch (e) {}
-      }, 12000);
-      return () => clearInterval(poll);
-    }
     let alive = true;
     function schedule() {
       const wait = 5000 + Math.random() * 9000;
       setTimeout(() => {
         if (!alive) return;
         setEntries(prev => {
-          const tick = N.genTickEntry();
-          if (!tick) return prev;
-          const next = [...prev, tick];
+          const next = [...prev, N.genTickEntry()];
           N.saveLog(next);
           return next;
         });
@@ -79,49 +48,40 @@ function useLogStore() {
     }
     schedule();
     return () => { alive = false; };
-  }, [apiOnline]);
-
+  }, []);
   useEffect(() => {
-    if (apiOnline) return;
     const h = (e) => {
-      if (e.key === "network_log_v3") setEntries(N.loadLog());
+      if (e.key && e.key.startsWith("network_log")) setEntries(N.loadLog());
     };
     window.addEventListener("storage", h);
     return () => window.removeEventListener("storage", h);
-  }, [apiOnline]);
-
+  }, []);
   const inject = useCallback((entry) => {
-    const payload = Object.assign({ id: "INJ" + Date.now(), ts: Date.now(), public: true }, entry);
-    if (apiOnline && API) {
-      API.inject(entry).then((saved) => setEntries(prev => [...prev, saved])).catch(() => {
-        setEntries(prev => { const next = [...prev, payload]; N.saveLog(next); return next; });
-      });
-      return;
-    }
-    setEntries(prev => { const next = [...prev, payload]; N.saveLog(next); return next; });
-  }, [apiOnline]);
-
+    setEntries(prev => {
+      const next = [...prev, Object.assign({
+        id: "INJ" + Date.now() + "-" + Math.floor(Math.random()*999),
+        ts: Date.now(),
+        public: true,
+      }, entry)];
+      N.saveLog(next);
+      return next;
+    });
+  }, []);
   const update = useCallback((id, patch) => {
-    if (apiOnline && API) {
-      API.update(id, patch).then((saved) => setEntries(prev => prev.map(e => e.id === id ? saved : e))).catch(() => {
-        setEntries(prev => { const next = prev.map(e => e.id === id ? {...e, ...patch} : e); N.saveLog(next); return next; });
-      });
-      return;
-    }
-    setEntries(prev => { const next = prev.map(e => e.id === id ? {...e, ...patch} : e); N.saveLog(next); return next; });
-  }, [apiOnline]);
-
+    setEntries(prev => {
+      const next = prev.map(e => e.id === id ? {...e, ...patch} : e);
+      N.saveLog(next);
+      return next;
+    });
+  }, []);
   const remove = useCallback((id) => {
-    if (apiOnline && API) {
-      API.remove(id).then(() => setEntries(prev => prev.filter(e => e.id !== id))).catch(() => {
-        setEntries(prev => { const next = prev.filter(e => e.id !== id); N.saveLog(next); return next; });
-      });
-      return;
-    }
-    setEntries(prev => { const next = prev.filter(e => e.id !== id); N.saveLog(next); return next; });
-  }, [apiOnline]);
-
-  return { entries, inject, update, remove, apiOnline };
+    setEntries(prev => {
+      const next = prev.filter(e => e.id !== id);
+      N.saveLog(next);
+      return next;
+    });
+  }, []);
+  return { entries, inject, update, remove };
 }
 
 /* ---------------- header + nav ---------------- */
@@ -240,99 +200,21 @@ function LogEntry({ e, animate, withAvatar = true }) {
 }
 
 /* ============================================================
-   BUBBLE MAP — landing (pan + zoom)
+   BUBBLE MAP — landing
    ============================================================ */
-const MAP_WORLD = 1600;
-const MAP_ZOOM_MIN = 0.35;
-const MAP_ZOOM_MAX = 2.75;
-
-function clampMap(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
-
-function mapCenterPan(viewportEl, zoom) {
-  if (!viewportEl) return { x: 0, y: 0 };
-  const w = MAP_WORLD * zoom;
-  const h = MAP_WORLD * zoom;
-  return {
-    x: (viewportEl.clientWidth - w) / 2,
-    y: (viewportEl.clientHeight - h) / 2,
-  };
-}
-
 function BubbleMap({ entries, now }) {
-  const viewportRef = useRef(null);
-  const [pan, setPan] = useState({ x: 0, y: 0 });
-  const [zoom, setZoom] = useState(1);
-  const [dragging, setDragging] = useState(false);
-  const dragRef = useRef(null);
-
+  // recent activity per source — for pulses
   const recentlyActive = useMemo(() => {
-    const cutoff = Date.now() - 25000;
+    const cutoff = Date.now() - 25000; // 25s
     const set = new Set();
     for (const e of entries) if (e.ts >= cutoff) set.add(e.src);
     return set;
   }, [entries, now]);
 
+  // dimensions — stage is positioned absolute over .map-wrap.
+  // we use percent-based coords so it's responsive.
+  // center of stage is (50%, 50%).
   const tokens = N.PROJECTS;
-
-  const resetView = useCallback(() => {
-    const vp = viewportRef.current;
-    setZoom(1);
-    setPan(mapCenterPan(vp, 1));
-  }, []);
-
-  useEffect(() => {
-    resetView();
-    const onResize = () => resetView();
-    window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
-  }, [resetView]);
-
-  const onWheel = useCallback((e) => {
-    e.preventDefault();
-    const vp = viewportRef.current;
-    if (!vp) return;
-    const rect = vp.getBoundingClientRect();
-    const mx = e.clientX - rect.left;
-    const my = e.clientY - rect.top;
-    const factor = e.deltaY > 0 ? 0.9 : 1.1;
-    setZoom((z) => {
-      const nz = clampMap(z * factor, MAP_ZOOM_MIN, MAP_ZOOM_MAX);
-      setPan((p) => ({
-        x: mx - ((mx - p.x) / z) * nz,
-        y: my - ((my - p.y) / z) * nz,
-      }));
-      return nz;
-    });
-  }, []);
-
-  const onPointerDown = useCallback((e) => {
-    if (e.button !== 0) return;
-    // only pan when grabbing empty map space — never steal clicks from nodes
-    if (e.target.closest(".bubble, .map-overlay, button, a")) return;
-    setDragging(true);
-    dragRef.current = {
-      id: e.pointerId,
-      x: e.clientX,
-      y: e.clientY,
-      panX: pan.x,
-      panY: pan.y,
-    };
-    e.currentTarget.setPointerCapture(e.pointerId);
-  }, [pan]);
-
-  const onPointerMove = useCallback((e) => {
-    const d = dragRef.current;
-    if (!d || d.id !== e.pointerId) return;
-    const dx = e.clientX - d.x;
-    const dy = e.clientY - d.y;
-    setPan({ x: d.panX + dx, y: d.panY + dy });
-  }, []);
-
-  const onPointerUp = useCallback((e) => {
-    setDragging(false);
-    if (dragRef.current?.id === e.pointerId) dragRef.current = null;
-    try { e.currentTarget.releasePointerCapture(e.pointerId); } catch (err) {}
-  }, []);
 
   // Layout: place tokens on a circle around center, with arc-distance scaled.
   // Place each token's agents in a small arc on the outside of the token,
@@ -361,36 +243,26 @@ function BubbleMap({ entries, now }) {
   const tokenCoords = tokens.map((p, i) => {
     const tp = tokenPos(i, tokens.length);
     edges.push({ x1: 50, y1: 50, x2: tp.x, y2: tp.y, type: "central" });
-    const agents = p.agents || [];
-    for (let j = 0; j < agents.length; j++) {
-      const ap = agentPos(tp.angle, j, agents.length, tp.x, tp.y);
+    for (let j = 0; j < p.agents.length; j++) {
+      const ap = agentPos(tp.angle, j, p.agents.length, tp.x, tp.y);
       edges.push({ x1: tp.x, y1: tp.y, x2: ap.x, y2: ap.y, type: "agent", parentStatus: p.status });
-      agents[j].__pos = ap;
+      p.agents[j].__pos = ap; // stash for render
     }
     p.__pos = tp;
     return tp;
   });
 
-  const worldStyle = {
-    width: MAP_WORLD,
-    height: MAP_WORLD,
-    transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
-    transformOrigin: "0 0",
-  };
-
   return (
-    <div className="map-wrap map-fullscreen">
+    <div className="map-wrap">
+      <div className="map-grid"></div>
+
+      {/* overlays first — at desktop they're absolute, on narrow they stack above the stage */}
       <div className="map-overlay tl">
         <div className="overlay-h">// observation deck</div>
         <h1 className="welcome-h">An autonomous swarm launching tokens on Pump.fun — visible.</h1>
         <p className="welcome-p">
-          One central intelligence at the center. Developer brains spawn around it — each runs one token and hires the agents it needs. Click any node to watch what it is doing.
+          One central intelligence at the center. N developer brains around it. Each brain runs one token and hires the agents it needs. Click any node to watch what it is thinking.
         </p>
-        {tokens.length === 0 && (
-          <p className="welcome-p" style={{color:"var(--accent-dim)", marginTop:8}}>
-            No tokens live yet. Spawn the first developer from admin when you are ready.
-          </p>
-        )}
         <div style={{display:"flex", gap:10, marginTop:14}}>
           <a className="btn btn-sm btn-accent swap" href="#/console"
              onClick={(e)=>{e.preventDefault();navigate("/console");}}>[ MASTER CONSOLE ]</a>
@@ -450,87 +322,67 @@ function BubbleMap({ entries, now }) {
         </div>
       </div>
 
-      <div className="map-overlay bl map-nav-hint">
-        <span>scroll · zoom</span>
-        <span>drag · pan</span>
-        <button type="button" className="btn btn-sm btn-ghost" onClick={resetView}>[ RESET VIEW ]</button>
-        <span className="muted">{Math.round(zoom * 100)}%</span>
-      </div>
+      {/* canvas — edges + bubbles share coordinate space */}
+      <div className="map-canvas">
+        <svg className="map-edges" viewBox="0 0 100 100" preserveAspectRatio="none">
+          {edges.map((e, i) => (
+            <line key={i}
+                  x1={e.x1} y1={e.y1} x2={e.x2} y2={e.y2}
+                  stroke={e.type === "central" ? "rgba(142,255,193,0.18)" : e.parentStatus === "degraded" ? "rgba(255,194,138,0.12)" : "rgba(255,255,255,0.08)"}
+                  strokeWidth="0.12"
+                  strokeDasharray={e.type === "agent" ? "0.6 0.6" : "0"} />
+          ))}
+        </svg>
 
-      <div
-        ref={viewportRef}
-        className="map-viewport"
-        onWheel={onWheel}
-      >
-        <div className="map-world" style={worldStyle}>
-          <div className="map-grid"></div>
-          <div
-            className={"map-pan-surface" + (dragging ? " is-dragging" : "")}
-            onPointerDown={onPointerDown}
-            onPointerMove={onPointerMove}
-            onPointerUp={onPointerUp}
-            onPointerCancel={onPointerUp}
-            onDoubleClick={resetView}
-          />
-          <div className="map-canvas">
-            <svg className="map-edges" viewBox="0 0 100 100" preserveAspectRatio="none">
-              {edges.map((e, i) => (
-                <line key={i}
-                      x1={e.x1} y1={e.y1} x2={e.x2} y2={e.y2}
-                      stroke={e.type === "central" ? "rgba(142,255,193,0.18)" : e.parentStatus === "degraded" ? "rgba(255,194,138,0.12)" : "rgba(255,255,255,0.08)"}
-                      strokeWidth="0.12"
-                      strokeDasharray={e.type === "agent" ? "0.6 0.6" : "0"} />
-              ))}
-            </svg>
+        <div className="map-stage">
+        {/* central */}
+        <BubbleNode
+          x={50} y={50} size={148}
+          cls="central"
+          to="/node/CENTRAL"
+          inner={<Avatar agent={N.CENTRAL} size={140} frame={false} />}
+          label="#000 · CENTRAL BRAIN"
+          name=""
+          active={recentlyActive.has("CENTRAL")}
+        />
 
-            <div className="map-stage">
-              <BubbleNode
-                x={50} y={50} size={148}
-                cls="central"
-                to="/node/CENTRAL"
-                inner={<Avatar agent={N.CENTRAL} size={140} frame={false} imageSrc="/centralbrain.png" />}
-                label="#000 · CENTRAL BRAIN"
-                name=""
-                active={recentlyActive.has("CENTRAL")}
-              />
+        {/* tokens */}
+        {tokens.map((p, i) => {
+          const tp = p.__pos;
+          const tokenActive = recentlyActive.has(p.id) ||
+                              p.agents.some(a => recentlyActive.has(a.id));
+          return (
+            <BubbleNode
+              key={p.id}
+              x={tp.x} y={tp.y} size={96}
+              cls={"token " + p.status}
+              to={"/node/" + p.id}
+              inner={<TokenGlyph project={p} size={96} frame={false} />}
+              label={p.ticker !== "—" ? p.ticker : p.codename}
+              name={p.id}
+              active={tokenActive}
+              style={{animationDelay: (i * 0.6) + "s"}}
+            />
+          );
+        })}
 
-              {tokens.map((p, i) => {
-                const tp = p.__pos;
-                const tokenActive = recentlyActive.has(p.id) ||
-                                    (p.agents || []).some(a => recentlyActive.has(a.id));
-                return (
-                  <BubbleNode
-                    key={p.id}
-                    x={tp.x} y={tp.y} size={96}
-                    cls={"token " + p.status}
-                    to={"/node/" + p.id}
-                    inner={<TokenGlyph project={p} size={96} frame={false} />}
-                    label={p.ticker !== "—" ? p.ticker : p.codename}
-                    name={p.id}
-                    active={tokenActive}
-                    style={{animationDelay: (i * 0.6) + "s"}}
-                  />
-                );
-              })}
-
-              {tokens.flatMap(p => (p.agents || []).map((a, j) => {
-                const ap = a.__pos;
-                return (
-                  <BubbleNode
-                    key={a.id}
-                    x={ap.x} y={ap.y} size={56}
-                    cls="agent"
-                    to={"/node/" + a.id}
-                    inner={<Avatar agent={a} size={56} frame={false} />}
-                    label={a.name}
-                    name=""
-                    active={recentlyActive.has(a.id)}
-                    style={{animationDelay: ((j + 1) * 0.4) + "s"}}
-                  />
-                );
-              }))}
-            </div>
-          </div>
+        {/* agents */}
+        {tokens.flatMap(p => p.agents.map((a, j) => {
+          const ap = a.__pos;
+          return (
+            <BubbleNode
+              key={a.id}
+              x={ap.x} y={ap.y} size={56}
+              cls="agent"
+              to={"/node/" + a.id}
+              inner={<Avatar agent={a} size={56} frame={false} />}
+              label={a.name}
+              name=""
+              active={recentlyActive.has(a.id)}
+              style={{animationDelay: ((j + 1) * 0.4) + "s"}}
+            />
+          );
+        }))}
         </div>
       </div>
     </div>
@@ -550,7 +402,7 @@ function BubbleNode({ x, y, size, cls, inner, label, name, to, active, style }) 
   };
   return (
     <a href={"#" + to}
-       onClick={(e) => { e.preventDefault(); navigate(to); }}
+       onClick={(e)=>{e.preventDefault();navigate(to);}}
        className={"bubble " + cls + (active ? " active" : "")}
        style={mergedStyle}>
       <div className="b-disc" style={{width: size, height: size}}>
@@ -573,11 +425,6 @@ function App() {
   useEffect(() => {
     if (booted) sessionStorage.setItem("booted_v3", "1");
   }, [booted]);
-  useEffect(() => {
-    if (path === "/log") navigate("/console");
-    else if (path === "/projects") navigate("/cast");
-    else if (path.startsWith("/projects/")) navigate("/node/" + path.replace("/projects/", ""));
-  }, [path]);
 
   const live = N.PROJECTS.filter(p => p.status === "live").length;
   const activeAgents = N.PROJECTS.filter(p => p.status !== "archived").length;
@@ -600,14 +447,12 @@ function App() {
     content = <NotFound />;
   }
 
-  const isMap = path === "/";
-
   return (
-    <div className={"page" + (isMap ? " page--map" : "")}>
+    <div className="page">
       {!booted && <BootScreen onDone={() => setBooted(true)} />}
       <Header path={path} activeAgents={activeAgents} liveTokens={live} />
-      <main className={isMap ? "main--map" : ""} style={isMap ? undefined : {flex:1}}>{content}</main>
-      {!isMap && <Footer now={now} />}
+      <main style={{flex:1}}>{content}</main>
+      <Footer now={now} />
       <div className="breath" title="node-00 heartbeat">▮</div>
     </div>
   );

@@ -194,7 +194,7 @@ function CastPage() {
       <div style={{marginTop:34}}>
         <div className="hdg"><span>// the parent — #000</span></div>
         <div style={{display:"grid", gridTemplateColumns:"repeat(4, 1fr)", gap:16, maxWidth:760}}>
-          <Avatar agent={NN.CENTRAL} size={150} label={true} imageSrc="/centralbrain.png" />
+          <Avatar agent={NN.CENTRAL} size={150} label={true} />
           <Avatar agent={NN.DISPATCH} size={150} label={true} />
         </div>
       </div>
@@ -202,18 +202,18 @@ function CastPage() {
       {NN.PROJECTS.filter(p => p.status !== "archived").map(p => (
         <div key={p.id} style={{marginTop:40}}>
           <div className="hdg" style={{display:"flex", justifyContent:"space-between"}}>
-            <span>// {p.id} · {p.codename} — {(p.agents || []).length} agent{(p.agents || []).length === 1 ? "" : "s"}</span>
+            <span>// {p.id} · {p.codename} — {p.agents.length} agent{p.agents.length === 1 ? "" : "s"}</span>
             <a href={"#/node/" + p.id}
                onClick={(e)=>{e.preventDefault();window.navigate("/node/" + p.id);}}
                className="muted small swap" style={{letterSpacing:"0.18em", textTransform:"uppercase"}}>
               dossier →
             </a>
           </div>
-          {(p.agents || []).length === 0 ? (
+          {p.agents.length === 0 ? (
             <div className="muted small">no agents retained yet.</div>
           ) : (
             <div style={{display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(150px, 1fr))", gap:16}}>
-              {(p.agents || []).map(a => (
+              {p.agents.map(a => (
                 <a key={a.id} href={"#/node/" + a.id}
                    onClick={(e)=>{e.preventDefault();window.navigate("/node/" + a.id);}}>
                   <Avatar agent={a} size={150} label={true} />
@@ -255,7 +255,7 @@ function CentralNodeDetail({ entries }) {
     <div className="wrap" style={{padding:"30px 32px 60px"}}>
       <BackLink />
       <div className="node-hero">
-        <Avatar agent={NN.CENTRAL} size={160} frame={true} label={false} imageSrc="/centralbrain.png" />
+        <Avatar agent={NN.CENTRAL} size={160} frame={true} label={false} />
         <div>
           <div className="sub">// node-00 · figure #000</div>
           <div className="name">Central Brain</div>
@@ -325,7 +325,7 @@ function TokenNodeDetail({ project, entries }) {
   const num = p.id.replace("DEV-","");
   const own = entries.filter(e =>
     e.src === p.id ||
-    (p.agents || []).some(a => a.id === e.src) ||
+    p.agents.some(a => a.id === e.src) ||
     (e.src === "CENTRAL" && e.msg.toLowerCase().includes(p.codename.toLowerCase()))
   );
   const spark = _um(() => {
@@ -391,11 +391,11 @@ function TokenNodeDetail({ project, entries }) {
 
           <div className="card">
             <span className="card-tag">retained agents</span>
-            {(p.agents || []).length === 0 ? (
+            {p.agents.length === 0 ? (
               <div className="muted small">no contractors retained.</div>
             ) : (
               <div style={{display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(120px, 1fr))", gap:14, marginTop:8}}>
-                {(p.agents || []).map(a => (
+                {p.agents.map(a => (
                   <a key={a.id} href={"#/node/" + a.id}
                      onClick={(e)=>{e.preventDefault();window.navigate("/node/" + a.id);}}>
                     <Avatar agent={a} size={120} label={true} />
@@ -534,32 +534,10 @@ function AdminGate({ onUnlock }) {
   const [pw, setPw] = _us("");
   const [err, setErr] = _us("");
   const [hint, setHint] = _us(false);
-  const [busy, setBusy] = _us(false);
-  async function submit(e) {
+  function submit(e) {
     e.preventDefault();
-    setBusy(true);
-    setErr("");
-    const API = window.NETWORK_API;
-    try {
-      if (API) {
-        const cfg = await API.probe();
-        if (cfg) {
-          await API.login(pw);
-          onUnlock();
-          return;
-        }
-      }
-      if (pw === "central" || pw === "00") {
-        sessionStorage.setItem("admin_ok", "1");
-        onUnlock();
-      } else {
-        setErr("INVALID CREDENTIAL.");
-      }
-    } catch (ex) {
-      setErr(ex.message || "AUTH FAILED.");
-    } finally {
-      setBusy(false);
-    }
+    if (pw === "central" || pw === "00") onUnlock();
+    else setErr("INVALID CREDENTIAL.");
   }
   return (
     <div className="gate">
@@ -571,9 +549,7 @@ function AdminGate({ onUnlock }) {
         <label className="field-label">passphrase</label>
         <input type="password" autoFocus value={pw} onChange={e => { setPw(e.target.value); setErr(""); }} placeholder="•••••••" />
         {err && <div className="err small" style={{marginTop:12, letterSpacing:"0.16em", textTransform:"uppercase"}}>{err}</div>}
-        <button className="btn btn-accent btn-block swap" style={{marginTop:18}} disabled={busy}>
-          [ {busy ? "AUTHENTICATING…" : "AUTHENTICATE"} ]
-        </button>
+        <button className="btn btn-accent btn-block swap" style={{marginTop:18}}>[ AUTHENTICATE ]</button>
         <div style={{marginTop:16, textAlign:"center"}}>
           <button type="button" className="muted tiny up" style={{background:"none",border:"none",cursor:"pointer", letterSpacing:"0.2em"}}
             onClick={() => setHint(!hint)}>{hint ? "(demo: central)" : "// forgotten?"}</button>
@@ -584,58 +560,11 @@ function AdminGate({ onUnlock }) {
 }
 
 function AdminConsole({ store }) {
-  const [brief, setBrief] = _us("");
   const [thought, setThought] = _us("");
   const [target,  setTarget]  = _us("ALL");
   const [tag,     setTag]     = _us("THOUGHT");
   const [pub,     setPub]     = _us(true);
   const [flash,   setFlash]   = _us(null);
-  const [aiBusy, setAiBusy] = _us(false);
-  const [aiErr, setAiErr] = _us("");
-  const [aiEnabled, setAiEnabled] = _us(false);
-  const [serverOnline, setServerOnline] = _us(false);
-  const [hasToken, setHasToken] = _us(false);
-
-  _ue(() => {
-    const API = window.NETWORK_API;
-    if (!API) return;
-    API.probe().then((cfg) => {
-      setServerOnline(!!cfg);
-      setAiEnabled(!!cfg?.aiEnabled);
-      setHasToken(!!sessionStorage.getItem(API.TOKEN_KEY));
-    });
-  }, []);
-
-  async function generateWithAi(e) {
-    e && e.preventDefault();
-    if (!brief.trim() || aiBusy) return;
-    const API = window.NETWORK_API;
-    if (!API || !API.isOnline()) {
-      setAiErr("BACKEND OFFLINE — deploy or run server locally.");
-      return;
-    }
-    if (!sessionStorage.getItem(API.TOKEN_KEY)) {
-      setAiErr("RE-LOGIN REQUIRED — sign out and authenticate while backend is online.");
-      return;
-    }
-    if (!aiEnabled) {
-      setAiErr("SET ANTHROPIC_API_KEY on server, then redeploy.");
-      return;
-    }
-    setAiBusy(true);
-    setAiErr("");
-    try {
-      const result = await API.generate({ brief: brief.trim(), tag, target });
-      setThought(result.msg);
-      setFlash("AI DRAFT READY.");
-      setTimeout(() => setFlash(null), 2800);
-    } catch (ex) {
-      const msg = ex.message || "GENERATION FAILED.";
-      setAiErr(msg === "unauthorized" ? "SESSION EXPIRED — sign in again." : msg);
-    } finally {
-      setAiBusy(false);
-    }
-  }
 
   const [spawnCode, setSpawnCode] = _us("");
   const [spawnTick, setSpawnTick] = _us("$");
@@ -651,7 +580,7 @@ function AdminConsole({ store }) {
       msg: thought.trim() + (target !== "ALL" ? ` (target: ${target})` : ""),
       public: pub,
     });
-    setFlash("INJECTED.");
+    setFlash("THOUGHT INJECTED.");
     setTimeout(() => setFlash(null), 1800);
     setThought("");
   }
@@ -659,7 +588,7 @@ function AdminConsole({ store }) {
   function spawn(e) {
     e.preventDefault();
     if (!spawnCode || !spawnBrief) return;
-    const nextNum = String(NN.PROJECTS.length + 1).padStart(3, "0");
+    const nextNum = String(NN.PROJECTS.length + Math.floor(Math.random()*3 + 1)).padStart(3,"0");
     const id = "DEV-" + nextNum;
     const wallet = "Z" + Math.random().toString(36).slice(2,8).toUpperCase() + "…" + Math.random().toString(36).slice(2,6).toUpperCase();
     const code = spawnCode.toUpperCase();
@@ -684,61 +613,23 @@ function AdminConsole({ store }) {
         <div style={{display:"flex", gap:14, alignItems:"center"}}>
           {flash && <span className="pill live"><span className="blob"></span>{flash}</span>}
           <span className="muted small up" style={{letterSpacing:"0.18em"}}>session · AUTH'D</span>
-          <button className="btn btn-sm btn-ghost" onClick={() => {
-            window.NETWORK_API?.logout();
-            sessionStorage.removeItem("admin_ok");
-            location.reload();
-          }}>SIGN OUT</button>
+          <button className="btn btn-sm btn-ghost" onClick={() => { sessionStorage.removeItem("admin_ok"); location.reload(); }}>SIGN OUT</button>
         </div>
       </div>
 
       <div className="admin">
         <div>
-          <form onSubmit={generateWithAi} className="card" style={{marginBottom:18}}>
-            <span className="card-tag">// AI brief · central brain</span>
-            <div style={{display:"flex", alignItems:"center", gap:14, marginBottom:14}}>
-              <Avatar agent={NN.CENTRAL} size={56} frame={true} label={false} imageSrc="/centralbrain.png" />
-              <div className="muted small" style={{lineHeight:1.6, fontSize:11}}>
-                describe what CENTRAL should consider. the model reads context + your brief and drafts the log line below.
-              </div>
-            </div>
-            <div className="tiny up" style={{marginBottom:12, letterSpacing:"0.14em", lineHeight:1.8}}>
-              <span className={serverOnline ? "cent" : "err"}>backend · {serverOnline ? "online" : "offline"}</span>
-              {" · "}
-              <span className={aiEnabled ? "cent" : "err"}>ai · {aiEnabled ? "ready" : "no key"}</span>
-              {" · "}
-              <span className={hasToken ? "cent" : "err"}>auth · {hasToken ? "ok" : "re-login"}</span>
-            </div>
-            <label className="field-label">operator brief</label>
-            <textarea value={brief} onChange={e => { setBrief(e.target.value); setAiErr(""); }}
-              placeholder='e.g. viral kangaroo meme — explore a token narrative but conclude it is not strong enough to spawn.' />
-            <div className="row" style={{marginTop:14}}>
-              <div>
-                <label className="field-label">tag</label>
-                <select value={tag} onChange={e => setTag(e.target.value)}>
-                  {["THOUGHT","DECISION","DIRECTIVE","OBSERVATION"].map(t => <option key={t}>{t}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="field-label">target</label>
-                <select value={target} onChange={e => setTarget(e.target.value)}>
-                  <option>ALL</option>
-                  {NN.PROJECTS.map(p => <option key={p.id}>{p.id}</option>)}
-                </select>
-              </div>
-            </div>
-            {aiErr && <div className="err small" style={{marginTop:12}}>{aiErr}</div>}
-            <button type="submit" className="btn btn-block swap" style={{marginTop:18, borderColor:"var(--accent-dim)", color:"var(--accent)"}}
-              disabled={!brief.trim() || aiBusy || !serverOnline || !aiEnabled || !hasToken}>
-              [ {aiBusy ? "GENERATING…" : "GENERATE WITH AI"} ]
-            </button>
-          </form>
-
           <form onSubmit={inject} className="card" style={{marginBottom:18}}>
-            <span className="card-tag">// inject · final payload</span>
-            <label className="field-label">message</label>
+            <span className="card-tag">// inject thought</span>
+            <div style={{display:"flex", alignItems:"center", gap:14, marginBottom:14}}>
+              <Avatar agent={NN.CENTRAL} size={56} frame={true} label={false} />
+              <div className="muted small" style={{lineHeight:1.6, fontSize:11}}>
+                you are ghost-writing the central brain. terse, declarative, no exclamation marks.
+              </div>
+            </div>
+            <label className="field-label">payload</label>
             <textarea value={thought} onChange={e => setThought(e.target.value)}
-              placeholder="terse log line as it will appear in the console." />
+              placeholder="e.g. spawn DEV-006 for codename TANTRUM. budget 1.4 SOL. window: weekends only." />
             <div className="row" style={{marginTop:14}}>
               <div>
                 <label className="field-label">target</label>
@@ -814,15 +705,9 @@ function AdminConsole({ store }) {
                   <span className={NN.srcColor(e.src) + " tiny up"} style={{letterSpacing:"0.14em"}}>[{e.src}]</span>
                   <span className="muted tiny up" style={{letterSpacing:"0.14em"}}>{e.tag}</span>
                   {!e.public && <span className="dev tiny up" style={{letterSpacing:"0.14em"}}>· PRIVATE</span>}
-                  {e.redacted && <span className="err tiny up" style={{letterSpacing:"0.14em"}}>· REDACTED</span>}
                 </div>
-                <div style={{color:"var(--text)"}}>
-                  {e.redacted ? <span className="muted">[hidden from public log]</span> : e.msg}
-                </div>
+                <div style={{color:"var(--text)"}}>{e.msg}</div>
                 <div style={{display:"flex", gap:6, marginTop:4}}>
-                  <button className="btn btn-sm btn-ghost" onClick={() => store.update(e.id, { redacted: !e.redacted })}>
-                    {e.redacted ? "UNREDACT" : "REDACT"}
-                  </button>
                   <button className="btn btn-sm btn-ghost" onClick={() => store.update(e.id, { public: !e.public })}>
                     {e.public === false ? "MAKE PUBLIC" : "MAKE PRIVATE"}
                   </button>
