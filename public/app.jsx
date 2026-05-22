@@ -124,6 +124,100 @@ function useLogStore() {
   return { entries, inject, update, remove, apiOnline };
 }
 
+/* ---------------- projects store (map + cast + admin) ---------------- */
+function useProjectsStore() {
+  const [tick, setTick] = useState(0);
+  const [apiOnline, setApiOnline] = useState(false);
+  const [nextDev, setNextDev] = useState(() => N.nextDevNumberFrom(N.PROJECTS));
+  const API = window.NETWORK_API;
+  const bump = useCallback(() => setTick((t) => t + 1), []);
+
+  const applyList = useCallback((list, next) => {
+    N.replaceProjects((list || []).map(N.normalizeProject));
+    if (typeof next === "number") setNextDev(next);
+    else setNextDev(N.nextDevNumberFrom(N.PROJECTS));
+    bump();
+  }, [bump]);
+
+  useEffect(() => {
+    const local = N.loadProjectsLocal();
+    if (local?.length) applyList(local);
+    if (!API) return;
+    let cancelled = false;
+    (async () => {
+      const cfg = await API.probe();
+      if (cancelled || !cfg) return;
+      setApiOnline(true);
+      try {
+        const data = await API.fetchProjects();
+        if (cancelled) return;
+        applyList(data.projects, data.nextDev);
+        N.saveProjectsLocal(N.PROJECTS);
+      } catch (e) { /* keep local */ }
+    })();
+    return () => { cancelled = true; };
+  }, [applyList]);
+
+  useEffect(() => {
+    if (!apiOnline || !API) return;
+    const poll = setInterval(async () => {
+      try {
+        const data = await API.fetchProjects();
+        applyList(data.projects, data.nextDev);
+        N.saveProjectsLocal(N.PROJECTS);
+      } catch (e) {}
+    }, 15000);
+    return () => clearInterval(poll);
+  }, [apiOnline, applyList]);
+
+  const spawn = useCallback(async ({ codename, ticker, budget, thesis }) => {
+    const code = String(codename || "").trim().toUpperCase();
+    const tickStr = (ticker || "$" + code).trim();
+    const bal = parseFloat(budget);
+    if (apiOnline && API) {
+      const data = await API.spawnProject({
+        codename: code,
+        ticker: tickStr,
+        budget: Number.isFinite(bal) ? bal : 2,
+        thesis: String(thesis || "").trim(),
+      });
+      const p = N.normalizeProject(data.project);
+      if (!N.PROJECTS.some((x) => x.id === p.id)) N.PROJECTS.push(p);
+      else N.replaceProjects(N.PROJECTS.map((x) => (x.id === p.id ? p : x)));
+      setNextDev(data.nextDev ?? N.nextDevNumberFrom(N.PROJECTS));
+      N.saveProjectsLocal(N.PROJECTS);
+      bump();
+      return p;
+    }
+    const id = N.nextDevId(N.PROJECTS);
+    const wallet = "Z" + Math.random().toString(36).slice(2, 8).toUpperCase() + "…" +
+      Math.random().toString(36).slice(2, 6).toUpperCase();
+    const p = N.normalizeProject({
+      id,
+      codename: code,
+      ticker: tickStr.startsWith("$") ? tickStr : "$" + tickStr.replace(/^\$/, ""),
+      status: "booting",
+      launched: Date.now(),
+      wallet,
+      balance: Number.isFinite(bal) ? bal : 2,
+      marketCap: 0,
+      holders: 0,
+      thesis: String(thesis || "").trim(),
+      agents: [],
+      pumpfun: null,
+    });
+    N.PROJECTS.push(p);
+    setNextDev(N.nextDevNumberFrom(N.PROJECTS));
+    N.saveProjectsLocal(N.PROJECTS);
+    bump();
+    return p;
+  }, [apiOnline, bump]);
+
+  const nextDevLabel = "DEV-" + String(nextDev).padStart(3, "0");
+
+  return { tick, spawn, nextDev, nextDevLabel, apiOnline };
+}
+
 /* ---------------- header + nav ---------------- */
 function NavLink({ to, label, active }) {
   return (
@@ -258,7 +352,7 @@ function mapCenterPan(viewportEl, zoom) {
   };
 }
 
-function BubbleMap({ entries, now }) {
+function BubbleMap({ entries, now, projectsTick }) {
   const viewportRef = useRef(null);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(1);
@@ -272,7 +366,8 @@ function BubbleMap({ entries, now }) {
     return set;
   }, [entries, now]);
 
-  const tokens = N.PROJECTS;
+  const tokens = N.PROJECTS; // projectsTick forces re-render when list changes
+  void projectsTick;
 
   const resetView = useCallback(() => {
     const vp = viewportRef.current;
@@ -569,6 +664,7 @@ function App() {
   const { path } = useRoute();
   const now = useNow(1000);
   const log = useLogStore();
+  const projects = useProjectsStore();
   const [booted, setBooted] = useState(() => sessionStorage.getItem("booted_v3") === "1");
   useEffect(() => {
     if (booted) sessionStorage.setItem("booted_v3", "1");
@@ -579,21 +675,22 @@ function App() {
     else if (path.startsWith("/projects/")) navigate("/node/" + path.replace("/projects/", ""));
   }, [path]);
 
+  void projects.tick;
   const live = N.PROJECTS.filter(p => p.status === "live").length;
   const activeAgents = N.PROJECTS.filter(p => p.status !== "archived").length;
 
   let content;
   if (path === "/") {
-    content = <BubbleMap entries={log.entries} now={now} />;
+    content = <BubbleMap entries={log.entries} now={now} projectsTick={projects.tick} />;
   } else if (path === "/console") {
-    content = <ConsolePage store={log} />;
+    content = <ConsolePage store={log} projectsTick={projects.tick} />;
   } else if (path === "/cast") {
-    content = <CastPage />;
+    content = <CastPage projectsTick={projects.tick} />;
   } else if (path.startsWith("/node/")) {
     const id = path.replace("/node/", "");
     content = <NodeDetailPage id={id} entries={log.entries} now={now} />;
   } else if (path === "/admin") {
-    content = <AdminPage store={log} />;
+    content = <AdminPage store={log} projects={projects} />;
   } else if (path === "/manifest") {
     content = <ManifestPage />;
   } else {
@@ -625,6 +722,6 @@ function NotFound() {
 }
 
 Object.assign(window, {
-  App, useRoute, useNow, useLogStore,
+  App, useRoute, useNow, useLogStore, useProjectsStore,
   navigate, LogEntry, Header, Footer, BubbleMap,
 });

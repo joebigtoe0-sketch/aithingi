@@ -60,8 +60,14 @@
     },
 
     async fetchProjects() {
-      const data = await request("/projects");
-      return data.projects;
+      return request("/projects");
+    },
+
+    async spawnProject({ codename, ticker, budget, thesis }) {
+      return request("/projects", {
+        method: "POST",
+        body: JSON.stringify({ codename, ticker, budget, thesis }),
+      });
     },
 
     async inject(entry) {

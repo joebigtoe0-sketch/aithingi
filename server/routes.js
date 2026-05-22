@@ -7,6 +7,8 @@ import {
   updateLogEntry,
   deleteLogEntry,
   getProjects,
+  createDeveloperProject,
+  getNextDevNumber,
   hasDatabase,
 } from "./db.js";
 import { generateCentralMessage, isAiConfigured } from "./ai.js";
@@ -99,9 +101,24 @@ export function createApiRouter() {
   api.get("/projects", async (_req, res) => {
     try {
       const projects = await getProjects();
-      res.json({ projects });
+      const nextDev = await getNextDevNumber();
+      res.json({ projects, nextDev });
     } catch (err) {
       res.status(500).json({ error: "failed to load projects" });
+    }
+  });
+
+  api.post("/projects", requireAdmin, async (req, res) => {
+    try {
+      const { codename, ticker, budget, thesis } = req.body || {};
+      if (!codename?.trim()) return res.status(400).json({ error: "codename required" });
+      if (!thesis?.trim()) return res.status(400).json({ error: "brief required" });
+      const project = await createDeveloperProject({ codename, ticker, budget, thesis });
+      const nextDev = await getNextDevNumber();
+      res.status(201).json({ project, nextDev });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: err.message || "spawn failed" });
     }
   });
 

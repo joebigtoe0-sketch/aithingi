@@ -7,8 +7,9 @@ const NN = window.NETWORK;
 /* ============================================================
    /console — master log
    ============================================================ */
-function ConsolePage({ store }) {
+function ConsolePage({ store, projectsTick }) {
   const all = store.entries.filter(e => e.public !== false);
+  void projectsTick;
 
   // build filter list
   const sideChips = _um(() => {
@@ -20,7 +21,7 @@ function ConsolePage({ store }) {
     NN.PROJECTS.forEach(p => list.push({ id: p.id, label: `${p.id} · ${p.codename}`, group: "dev" }));
     list.push({ id: "SUB-AGENTS", label: "ALL SUB-AGENTS", group: "sub" });
     return list;
-  }, []);
+  }, [projectsTick]);
 
   const [active, setActive] = _us("ALL");
   const filtered = active === "ALL" ? all :
@@ -179,7 +180,8 @@ function ConsolePage({ store }) {
 /* ============================================================
    /cast — full roster of figures
    ============================================================ */
-function CastPage() {
+function CastPage({ projectsTick }) {
+  void projectsTick;
   return (
     <div className="wrap" style={{padding:"40px 32px 60px"}}>
       <div className="muted small up" style={{letterSpacing:"0.24em", marginBottom:6}}>// generated cast</div>
@@ -202,24 +204,31 @@ function CastPage() {
       {NN.PROJECTS.filter(p => p.status !== "archived").map(p => (
         <div key={p.id} style={{marginTop:40}}>
           <div className="hdg" style={{display:"flex", justifyContent:"space-between"}}>
-            <span>// {p.id} · {p.codename} — {(p.agents || []).length} agent{(p.agents || []).length === 1 ? "" : "s"}</span>
+            <span>// {p.id} · {p.codename} — {(p.agents || []).length} contractor{(p.agents || []).length === 1 ? "" : "s"}</span>
             <a href={"#/node/" + p.id}
                onClick={(e)=>{e.preventDefault();window.navigate("/node/" + p.id);}}
                className="muted small swap" style={{letterSpacing:"0.18em", textTransform:"uppercase"}}>
               dossier →
             </a>
           </div>
-          {(p.agents || []).length === 0 ? (
-            <div className="muted small">no agents retained yet.</div>
-          ) : (
-            <div style={{display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(150px, 1fr))", gap:16}}>
-              {(p.agents || []).map(a => (
-                <a key={a.id} href={"#/node/" + a.id}
-                   onClick={(e)=>{e.preventDefault();window.navigate("/node/" + a.id);}}>
-                  <Avatar agent={a} size={150} label={true} />
-                </a>
-              ))}
-            </div>
+          <div style={{display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(150px, 1fr))", gap:16}}>
+            <a href={"#/node/" + p.id}
+               onClick={(e)=>{e.preventDefault();window.navigate("/node/" + p.id);}}
+               style={{textDecoration:"none"}}>
+              <div style={{display:"flex", flexDirection:"column", alignItems:"center", gap:8}}>
+                <TokenGlyph project={p} size={150} frame={true} />
+                <div className="muted small up" style={{letterSpacing:"0.16em"}}>{p.id} · {p.codename}</div>
+              </div>
+            </a>
+            {(p.agents || []).map(a => (
+              <a key={a.id} href={"#/node/" + a.id}
+                 onClick={(e)=>{e.preventDefault();window.navigate("/node/" + a.id);}}>
+                <Avatar agent={a} size={150} label={true} />
+              </a>
+            ))}
+          </div>
+          {(p.agents || []).length === 0 && (
+            <div className="muted small" style={{marginTop:10}}>no contractors hired yet — developer brain only.</div>
           )}
         </div>
       ))}
@@ -524,10 +533,10 @@ function Sparkline({ data, color }) {
 /* ============================================================
    /admin — kept logic, restyled chrome
    ============================================================ */
-function AdminPage({ store }) {
+function AdminPage({ store, projects }) {
   const [unlocked, setUnlocked] = _us(() => sessionStorage.getItem("admin_ok") === "1");
   if (!unlocked) return <AdminGate onUnlock={() => { sessionStorage.setItem("admin_ok","1"); setUnlocked(true); }} />;
-  return <AdminConsole store={store} />;
+  return <AdminConsole store={store} projects={projects} />;
 }
 
 function AdminGate({ onUnlock }) {
@@ -583,7 +592,7 @@ function AdminGate({ onUnlock }) {
   );
 }
 
-function AdminConsole({ store }) {
+function AdminConsole({ store, projects }) {
   const [brief, setBrief] = _us("");
   const [thought, setThought] = _us("");
   const [target,  setTarget]  = _us("ALL");
@@ -641,6 +650,10 @@ function AdminConsole({ store }) {
   const [spawnTick, setSpawnTick] = _us("$");
   const [spawnBudget, setSpawnBudget] = _us("2.0");
   const [spawnBrief, setSpawnBrief] = _us("");
+  const [spawnBusy, setSpawnBusy] = _us(false);
+
+  void projects.tick;
+  const nextDevLabel = projects?.nextDevLabel || NN.nextDevId(NN.PROJECTS);
 
   function inject(e) {
     e && e.preventDefault();
@@ -656,20 +669,33 @@ function AdminConsole({ store }) {
     setThought("");
   }
 
-  function spawn(e) {
+  async function spawn(e) {
     e.preventDefault();
-    if (!spawnCode || !spawnBrief) return;
-    const nextNum = String(NN.PROJECTS.length + 1).padStart(3, "0");
-    const id = "DEV-" + nextNum;
-    const wallet = "Z" + Math.random().toString(36).slice(2,8).toUpperCase() + "…" + Math.random().toString(36).slice(2,6).toUpperCase();
+    if (!spawnCode || !spawnBrief || spawnBusy) return;
+    setSpawnBusy(true);
     const code = spawnCode.toUpperCase();
-    store.inject({ src:"CENTRAL",  tag:"THOUGHT", msg: `spawning ${id} for project codename "${code}". budget ${spawnBudget} SOL.` });
-    setTimeout(() => store.inject({ src:"DISPATCH", tag:"ACK", msg: `wallet ${wallet} funded with ${spawnBudget} SOL` }), 400);
-    setTimeout(() => store.inject({ src:id, tag:"BOOT", msg: `initializing. reading brief.` }), 900);
-    setTimeout(() => store.inject({ src:id, tag:"PLAN", msg: `${spawnBrief.slice(0,140)}` }), 1600);
-    setFlash(`${id} SPAWNED.`);
-    setSpawnCode(""); setSpawnTick("$"); setSpawnBudget("2.0"); setSpawnBrief("");
-    setTimeout(() => setFlash(null), 2500);
+    try {
+      const project = await projects.spawn({
+        codename: code,
+        ticker: spawnTick,
+        budget: spawnBudget,
+        thesis: spawnBrief,
+      });
+      const id = project.id;
+      const wallet = project.wallet;
+      store.inject({ src:"CENTRAL",  tag:"THOUGHT", msg: `spawning ${id} for project codename "${code}". budget ${spawnBudget} SOL.` });
+      setTimeout(() => store.inject({ src:"DISPATCH", tag:"ACK", msg: `wallet ${wallet} funded with ${spawnBudget} SOL` }), 400);
+      setTimeout(() => store.inject({ src:id, tag:"BOOT", msg: `initializing. reading brief.` }), 900);
+      setTimeout(() => store.inject({ src:id, tag:"PLAN", msg: `${spawnBrief.slice(0,140)}` }), 1600);
+      setFlash(`${id} SPAWNED.`);
+      setSpawnCode(""); setSpawnTick("$"); setSpawnBudget("2.0"); setSpawnBrief("");
+      setTimeout(() => setFlash(null), 2500);
+    } catch (ex) {
+      setFlash(ex.message || "SPAWN FAILED.");
+      setTimeout(() => setFlash(null), 3500);
+    } finally {
+      setSpawnBusy(false);
+    }
   }
 
   const recent = [...store.entries].slice(-30).reverse();
@@ -786,8 +812,8 @@ function AdminConsole({ store }) {
             <textarea value={spawnBrief} onChange={e => setSpawnBrief(e.target.value)}
               placeholder="one paragraph. the brief is what the developer brain reads on boot." />
             <button type="submit" className="btn btn-block swap" style={{marginTop:18, borderColor:"var(--amber)", color:"var(--amber)"}}
-              disabled={!spawnCode || !spawnBrief}>
-              [ SPAWN DEV-{String(NN.PROJECTS.length + 1).padStart(3,"0")} ]
+              disabled={!spawnCode || !spawnBrief || spawnBusy}>
+              [ {spawnBusy ? "SPAWNING…" : "SPAWN " + nextDevLabel} ]
             </button>
             <div className="muted tiny" style={{marginTop:10, letterSpacing:"0.16em", textTransform:"uppercase"}}>
               emits THOUGHT → ACK → BOOT → PLAN automatically.

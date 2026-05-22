@@ -41,7 +41,17 @@ function rowToEntry(r) {
   };
 }
 
+function parseAgents(subagents) {
+  if (!subagents) return [];
+  if (Array.isArray(subagents)) return subagents;
+  if (typeof subagents === "string") {
+    try { return JSON.parse(subagents); } catch { return []; }
+  }
+  return [];
+}
+
 function rowToProject(r) {
+  const agents = parseAgents(r.subagents);
   return {
     id: r.id,
     codename: r.codename,
@@ -49,13 +59,94 @@ function rowToProject(r) {
     status: r.status,
     launched: r.launched ? Number(r.launched) : null,
     wallet: r.wallet,
-    balance: r.balance,
-    marketCap: r.market_cap,
-    holders: r.holders,
-    thesis: r.thesis,
-    subagents: r.subagents || [],
+    balance: Number(r.balance) || 0,
+    marketCap: r.market_cap != null ? Number(r.market_cap) : 0,
+    holders: r.holders != null ? Number(r.holders) : 0,
+    thesis: r.thesis || "",
+    agents,
     pumpfun: r.pumpfun,
   };
+}
+
+function projectToDbRow(p) {
+  return [
+    p.id,
+    p.codename,
+    p.ticker,
+    p.status,
+    p.launched,
+    p.wallet,
+    p.balance,
+    p.marketCap ?? 0,
+    p.holders ?? 0,
+    p.thesis || "",
+    JSON.stringify(p.agents || []),
+    p.pumpfun || null,
+  ];
+}
+
+export async function getNextDevNumber() {
+  const projects = await getProjects();
+  let max = 0;
+  for (const p of projects) {
+    const m = /^DEV-(\d+)$/i.exec(p.id);
+    if (m) max = Math.max(max, parseInt(m[1], 10));
+  }
+  return max + 1;
+}
+
+function makeWallet() {
+  const a = Math.random().toString(36).slice(2, 8).toUpperCase();
+  const b = Math.random().toString(36).slice(2, 6).toUpperCase();
+  return `${a}…${b}`;
+}
+
+export async function insertProject(project) {
+  const p = getPool();
+  const row = { ...project, agents: project.agents || [] };
+  if (!p) {
+    if (memoryStore.projects.some((x) => x.id === row.id)) {
+      throw new Error("project already exists");
+    }
+    memoryStore.projects.push(rowToProject({
+      ...row,
+      market_cap: row.marketCap,
+      subagents: row.agents,
+    }));
+    memoryStore.projects.sort((a, b) => a.id.localeCompare(b.id));
+    return memoryStore.projects.find((x) => x.id === row.id);
+  }
+  await p.query(
+    `INSERT INTO projects (id, codename, ticker, status, launched, wallet, balance, market_cap, holders, thesis, subagents, pumpfun)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+    projectToDbRow(row)
+  );
+  const { rows } = await p.query("SELECT * FROM projects WHERE id = $1", [row.id]);
+  return rows.length ? rowToProject(rows[0]) : rowToProject({ ...row, subagents: row.agents });
+}
+
+export async function createDeveloperProject({ codename, ticker, budget, thesis }) {
+  const num = await getNextDevNumber();
+  const id = "DEV-" + String(num).padStart(3, "0");
+  const code = String(codename || "").trim().toUpperCase();
+  if (!code) throw new Error("codename required");
+  const tick = (ticker || "$" + code).trim();
+  const bal = Number(budget);
+  const project = {
+    id,
+    codename: code,
+    ticker: tick.startsWith("$") ? tick : "$" + tick.replace(/^\$/, ""),
+    status: "booting",
+    launched: Date.now(),
+    wallet: makeWallet(),
+    balance: Number.isFinite(bal) ? bal : 2,
+    marketCap: 0,
+    holders: 0,
+    thesis: String(thesis || "").trim(),
+    agents: [],
+    pumpfun: null,
+  };
+  return insertProject(project);
 }
 
 export async function initDb() {
@@ -103,10 +194,7 @@ async function seedDatabase(client) {
     await client.query(
       `INSERT INTO projects (id, codename, ticker, status, launched, wallet, balance, market_cap, holders, thesis, subagents, pumpfun)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) ON CONFLICT (id) DO NOTHING`,
-      [
-        p.id, p.codename, p.ticker, p.status, p.launched, p.wallet, p.balance,
-        p.marketCap, p.holders, p.thesis, JSON.stringify(p.subagents), p.pumpfun,
-      ]
+      projectToDbRow({ ...p, agents: p.agents || p.subagents || [] })
     );
   }
   const deployTs = String(Date.now());

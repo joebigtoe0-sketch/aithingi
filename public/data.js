@@ -27,8 +27,44 @@ const DISPATCH = {
   seed: 11,
 };
 
-// Populated via admin spawn; each project may include `agents: [...]`
+// Populated via admin spawn + API; each project may include `agents: [...]`
 const PROJECTS = [];
+const PROJECTS_KEY = "network_projects_v1";
+
+function nextDevNumberFrom(projects) {
+  let max = 0;
+  for (const p of projects) {
+    const m = /^DEV-(\d+)$/i.exec(p.id);
+    if (m) max = Math.max(max, parseInt(m[1], 10));
+  }
+  return max + 1;
+}
+
+function nextDevId(projects) {
+  return "DEV-" + String(nextDevNumberFrom(projects || PROJECTS)).padStart(3, "0");
+}
+
+function loadProjectsLocal() {
+  try {
+    const raw = localStorage.getItem(PROJECTS_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch (e) {}
+  return null;
+}
+
+function saveProjectsLocal(arr) {
+  localStorage.setItem(PROJECTS_KEY, JSON.stringify(arr));
+}
+
+function replaceProjects(list) {
+  PROJECTS.splice(0, PROJECTS.length, ...(list || []));
+}
+
+function normalizeProject(p) {
+  if (!p) return p;
+  const agents = p.agents || p.subagents || [];
+  return Object.assign({}, p, { agents });
+}
 
 const SEED_LINES = [];
 
@@ -131,7 +167,10 @@ function uptimeShort(launched) {
 
 window.NETWORK = {
   CENTRAL, DISPATCH, PROJECTS,
+  PROJECTS_KEY,
   loadLog, saveLog, genTickEntry,
+  loadProjectsLocal, saveProjectsLocal, replaceProjects, normalizeProject,
+  nextDevId, nextDevNumberFrom,
   findAgent, findProject, projectOfAgent, srcAgent,
   srcColor, shortWallet, fmtBalance, fmtMcap,
   uptimeStr, uptimeShort, deployTs, isoTs,
