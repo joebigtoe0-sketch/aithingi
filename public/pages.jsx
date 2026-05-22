@@ -18,7 +18,11 @@ function ConsolePage({ store, projectsTick }) {
       { id: "CENTRAL", label: "CENTRAL BRAIN", group: "central" },
       { id: "DISPATCH", label: "DISPATCH", group: "dispatch" },
     ];
-    NN.PROJECTS.forEach(p => list.push({ id: p.id, label: `${p.id} · ${p.codename}`, group: "dev" }));
+    NN.PROJECTS.forEach(p => {
+      const n = NN.normalizeProject(p);
+      list.push({ id: n.tokenId, label: `${n.tokenId} · ${n.codename}`, group: "dev" });
+      list.push({ id: n.devId, label: `${n.devId} · brain`, group: "dev" });
+    });
     list.push({ id: "SUB-AGENTS", label: "ALL SUB-AGENTS", group: "sub" });
     return list;
   }, [projectsTick]);
@@ -204,26 +208,34 @@ function CastPage({ projectsTick }) {
       {NN.PROJECTS.filter(p => p.status !== "archived").map(p => (
         <div key={p.id} style={{marginTop:40}}>
           <div className="hdg" style={{display:"flex", justifyContent:"space-between"}}>
-            <span>// {p.id} · {p.codename} — {(p.agents || []).length} contractor{(p.agents || []).length === 1 ? "" : "s"}</span>
-            <a href={"#/node/" + p.id}
-               onClick={(e)=>{e.preventDefault();window.navigate("/node/" + p.id);}}
+            <span>// {p.tokenId || p.id} · {p.codename} — {(p.agents || []).length} contractor{(p.agents || []).length === 1 ? "" : "s"}</span>
+            <a href={"#/node/" + (p.tokenId || p.id)}
+               onClick={(e)=>{e.preventDefault();window.navigate("/node/" + (p.tokenId || p.id));}}
                className="muted small swap" style={{letterSpacing:"0.18em", textTransform:"uppercase"}}>
               dossier →
             </a>
           </div>
           <div style={{display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(150px, 1fr))", gap:16}}>
-            <a href={"#/node/" + p.id}
-               onClick={(e)=>{e.preventDefault();window.navigate("/node/" + p.id);}}
+            <a href={"#/node/" + (p.tokenId || p.id)}
+               onClick={(e)=>{e.preventDefault();window.navigate("/node/" + (p.tokenId || p.id));}}
                style={{textDecoration:"none"}}>
               <div style={{display:"flex", flexDirection:"column", alignItems:"center", gap:8}}>
                 <TokenGlyph project={p} size={150} frame={true} />
-                <div className="muted small up" style={{letterSpacing:"0.16em"}}>{p.id} · {p.codename}</div>
+                <div className="muted small up" style={{letterSpacing:"0.16em"}}>{p.tokenId || p.id} · token</div>
+              </div>
+            </a>
+            <a href={"#/node/" + p.devId}
+               onClick={(e)=>{e.preventDefault();window.navigate("/node/" + p.devId);}}
+               style={{textDecoration:"none"}}>
+              <div style={{display:"flex", flexDirection:"column", alignItems:"center", gap:8}}>
+                <Avatar agent={NN.devAgentFor(p)} size={150} label={true} />
+                <div className="muted small up" style={{letterSpacing:"0.16em"}}>{p.devId} · brain</div>
               </div>
             </a>
             {(p.agents || []).map(a => (
               <a key={a.id} href={"#/node/" + a.id}
                  onClick={(e)=>{e.preventDefault();window.navigate("/node/" + a.id);}}>
-                <Avatar agent={a} size={150} label={true} />
+                  <Avatar agent={a} size={150} label={true} imageSrc={a.imageUrl} />
               </a>
             ))}
           </div>
@@ -239,13 +251,33 @@ function CastPage({ projectsTick }) {
 /* ============================================================
    /node/[id] — entity detail (brain / token / agent)
    ============================================================ */
-function NodeDetailPage({ id, entries, now }) {
-  // resolve entity
+function useIsAdmin() {
+  return sessionStorage.getItem("admin_ok") === "1" &&
+    !!sessionStorage.getItem(window.NETWORK_API?.TOKEN_KEY || "network_admin_token");
+}
+
+function ImageUploadField({ label, file, onFile, previewUrl }) {
+  const url = previewUrl || (file ? URL.createObjectURL(file) : null);
+  return (
+    <div style={{ marginTop: 10 }}>
+      <label className="field-label">{label}</label>
+      <input type="file" accept="image/jpeg,image/png,image/webp,image/gif"
+        onChange={(e) => onFile(e.target.files?.[0] || null)} />
+      {url && <img src={url} alt="" className="upload-preview" />}
+    </div>
+  );
+}
+
+function NodeDetailPage({ id, entries, now, projects }) {
   if (id === "CENTRAL") return <CentralNodeDetail entries={entries} />;
   if (id === "DISPATCH") return <DispatchNodeDetail entries={entries} />;
-  if (id.startsWith("DEV-")) {
-    const p = NN.findProject(id);
-    if (p) return <TokenNodeDetail project={p} entries={entries} />;
+  const p = NN.findProject(id);
+  if (p) {
+    const k = id.toUpperCase();
+    if (k.startsWith("TKN-") || k === (p.tokenId || "").toUpperCase()) {
+      return <TokenNodeDetail project={p} entries={entries} projects={projects} />;
+    }
+    return <DevNodeDetail project={p} entries={entries} />;
   }
   const agent = NN.findAgent(id);
   if (agent) return <AgentNodeDetail agent={agent} entries={entries} />;
@@ -329,11 +361,69 @@ function DispatchNodeDetail({ entries }) {
   );
 }
 
-function TokenNodeDetail({ project, entries }) {
-  const p = project;
-  const num = p.id.replace("DEV-","");
+function AdminHirePanel({ project, projects }) {
+  const isAdmin = useIsAdmin();
+  const [hiring, setHiring] = _us(null);
+  const [img, setImg] = _us(null);
+  const [err, setErr] = _us("");
+  const [ok, setOk] = _us("");
+  if (!isAdmin || !projects?.hireAgent) return null;
+  const key = project.tokenId || project.id;
+
+  async function hire(type) {
+    if (!img) { setErr("upload an image for this contractor"); return; }
+    setHiring(type);
+    setErr("");
+    try {
+      const fd = new FormData();
+      fd.append("type", type);
+      fd.append("image", img);
+      await projects.hireAgent(key, fd);
+      setOk(`${type.toUpperCase()} hired.`);
+      setImg(null);
+      setTimeout(() => setOk(""), 2400);
+    } catch (ex) {
+      setErr(ex.message || "hire failed");
+    } finally {
+      setHiring(null);
+    }
+  }
+
+  return (
+    <div className="card" style={{ marginTop: 18, borderColor: "rgba(142,255,193,0.25)" }}>
+      <span className="card-tag">// operator · hire contractors</span>
+      <p className="muted small" style={{ lineHeight: 1.6, marginBottom: 12 }}>
+        logged in as admin. pick a role, upload its figure image, then hire. appears on map + cast.
+      </p>
+      {err && <div className="err small" style={{ marginBottom: 10 }}>{err}</div>}
+      {ok && <div className="cent small" style={{ marginBottom: 10 }}>{ok}</div>}
+      <ImageUploadField label="contractor image" file={img} onFile={setImg} />
+      <div className="hire-grid">
+        {NN.CONTRACTOR_TYPES.map((type) => {
+          const t = window.AVATAR_TYPES[type];
+          const taken = (project.agents || []).some((a) => a.type === type);
+          return (
+            <div key={type} className="hire-tile">
+              <div className="tiny up" style={{ color: t?.shade, letterSpacing: "0.14em" }}>{t?.label || type}</div>
+              <div className="muted small" style={{ margin: "8px 0 10px", fontSize: 10, lineHeight: 1.5 }}>
+                {AGENT_ROLE_BLURB[type]}
+              </div>
+              <button type="button" className="btn btn-sm btn-accent swap" disabled={!!hiring || taken}
+                onClick={() => hire(type)}>
+                {taken ? "[ retained ]" : hiring === type ? "[ … ]" : "[ hire ]"}
+              </button>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function TokenNodeDetail({ project, entries, projects }) {
+  const p = NN.normalizeProject(project);
   const own = entries.filter(e =>
-    e.src === p.id ||
+    e.src === p.tokenId || e.src === p.devId || e.src === p.id ||
     (p.agents || []).some(a => a.id === e.src) ||
     (e.src === "CENTRAL" && e.msg.toLowerCase().includes(p.codename.toLowerCase()))
   );
@@ -356,11 +446,15 @@ function TokenNodeDetail({ project, entries }) {
           <TokenGlyph project={p} size={130} frame={true} />
         </div>
         <div>
-          <div className="sub">// dossier · {p.id}</div>
+          <div className="sub">// token dossier · {p.tokenId}</div>
           <div className="name">{p.codename}</div>
           <div style={{display:"flex", alignItems:"center", gap:14, marginTop:8}}>
             <span className="dev" style={{fontSize:22}}>{p.ticker}</span>
             <span className={"pill " + p.status}><span className="blob"></span>{p.status}</span>
+          </div>
+          <div className="muted small" style={{ marginTop: 10 }}>
+            developer brain · <a className="cent swap" href={"#/node/" + p.devId}
+              onClick={(e) => { e.preventDefault(); window.navigate("/node/" + p.devId); }}>{p.devId}</a>
           </div>
         </div>
         <div style={{marginLeft:"auto"}}>
@@ -378,14 +472,17 @@ function TokenNodeDetail({ project, entries }) {
               "{p.thesis}"
             </div>
             <div className="muted small up" style={{marginTop:14, letterSpacing:"0.18em"}}>
-              — CENTRAL → {p.id}, {new Date(p.launched - 1800000).toISOString().slice(0,10)}
+              — CENTRAL → {p.devId}, {new Date(p.launched - 1800000).toISOString().slice(0,10)}
             </div>
           </div>
+
+          <AdminHirePanel project={p} projects={projects} />
 
           <div className="card" style={{marginBottom:18}}>
             <span className="card-tag">parameters</span>
             <dl className="kv" style={{marginTop:4}}>
-              <dt>brain id</dt>          <dd className="dev">{p.id}</dd>
+              <dt>token id</dt>          <dd className="dev">{p.tokenId}</dd>
+              <dt>dev brain</dt>         <dd className="dev">{p.devId}</dd>
               <dt>codename</dt>          <dd>{p.codename}</dd>
               <dt>ticker</dt>            <dd>{p.ticker}</dd>
               <dt>status</dt>            <dd><span className={"pill " + p.status}><span className="blob"></span>{p.status}</span></dd>
@@ -407,7 +504,7 @@ function TokenNodeDetail({ project, entries }) {
                 {(p.agents || []).map(a => (
                   <a key={a.id} href={"#/node/" + a.id}
                      onClick={(e)=>{e.preventDefault();window.navigate("/node/" + a.id);}}>
-                    <Avatar agent={a} size={120} label={true} />
+                    <Avatar agent={a} size={120} label={true} imageSrc={a.imageUrl} />
                   </a>
                 ))}
               </div>
@@ -431,11 +528,53 @@ function TokenNodeDetail({ project, entries }) {
                  style={{letterSpacing:"0.18em"}}>master →</a>
             </div>
             <div className="log" style={{padding:"14px 18px", maxHeight:420, overflowY:"auto", fontSize:11}}>
-              {own.length === 0 ? <div className="muted small">no entries scoped to this developer yet.</div> :
+              {own.length === 0 ? <div className="muted small">no entries scoped to this token yet.</div> :
                 own.slice(-40).map(e => <LogEntry key={e.id} e={e} />)
               }
             </div>
           </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DevNodeDetail({ project, entries }) {
+  const p = NN.normalizeProject(project);
+  const dev = NN.devAgentFor(p);
+  const own = entries.filter(e =>
+    e.src === p.devId || e.src === p.tokenId ||
+    (p.agents || []).some(a => a.id === e.src) ||
+    (e.src === "CENTRAL" && e.msg.toLowerCase().includes(p.codename.toLowerCase()))
+  );
+  return (
+    <div className="wrap-wide" style={{padding:"30px 32px 60px"}}>
+      <BackLink />
+      <div className="node-hero">
+        <Avatar agent={dev} size={130} frame={true} label={false} />
+        <div>
+          <div className="sub">// developer brain · {p.devId}</div>
+          <div className="name">{p.codename}</div>
+          <div className="muted small" style={{ marginTop: 10 }}>
+            token · <a className="cent swap" href={"#/node/" + p.tokenId}
+              onClick={(e) => { e.preventDefault(); window.navigate("/node/" + p.tokenId); }}>{p.tokenId} · {p.ticker}</a>
+          </div>
+          <span className={"pill " + p.status} style={{ marginTop: 10, display: "inline-flex" }}>
+            <span className="blob"></span>{p.status}
+          </span>
+        </div>
+      </div>
+      <div className="card" style={{ marginTop: 24 }}>
+        <span className="card-tag">brief on boot</span>
+        <div style={{ fontFamily: "var(--serif)", fontSize: 18, lineHeight: 1.5 }}>"{p.thesis}"</div>
+      </div>
+      <div className="card" style={{ marginTop: 18, padding: 0 }}>
+        <div className="panel-h" style={{ padding: "14px 18px", marginBottom: 0 }}>
+          <span className="panel-title">// dev log · {p.devId}</span>
+        </div>
+        <div className="log" style={{ padding: "14px 18px", maxHeight: 420, overflowY: "auto", fontSize: 11 }}>
+          {own.length === 0 ? <div className="muted small">no entries yet.</div> :
+            own.slice(-40).map(e => <LogEntry key={e.id} e={e} />)}
         </div>
       </div>
     </div>
@@ -450,14 +589,14 @@ function AgentNodeDetail({ agent, entries }) {
     <div className="wrap" style={{padding:"30px 32px 60px"}}>
       <BackLink />
       <div className="node-hero">
-        <Avatar agent={agent} size={160} frame={true} label={false} />
+        <Avatar agent={agent} size={160} frame={true} label={false} imageSrc={agent.imageUrl} />
         <div>
           <div className="sub">// {t.label} · figure #{agent.num}</div>
           <div className="name">{agent.name}</div>
           {parent && (
             <div className="muted small" style={{marginTop:10}}>
-              retained by <a className="cent swap" href={"#/node/" + parent.id}
-                             onClick={(e)=>{e.preventDefault();window.navigate("/node/" + parent.id);}}>{parent.id} · {parent.codename}</a>
+              retained by <a className="cent swap" href={"#/node/" + (parent.tokenId || parent.id)}
+                             onClick={(e)=>{e.preventDefault();window.navigate("/node/" + (parent.tokenId || parent.id));}}>{parent.tokenId} · {parent.codename}</a>
             </div>
           )}
         </div>
@@ -470,7 +609,7 @@ function AgentNodeDetail({ agent, entries }) {
             <dt>figure no.</dt>          <dd>#{agent.num}</dd>
             <dt>type</dt>                <dd style={{color: t.shade}}>{t.label}</dd>
             <dt>role</dt>                <dd>{AGENT_ROLE_BLURB[agent.type] || "—"}</dd>
-            <dt>retained by</dt>         <dd className="dev">{parent ? parent.id : "—"}</dd>
+            <dt>retained by</dt>         <dd className="dev">{parent ? (parent.tokenId || parent.id) : "—"}</dd>
             <dt>activity</dt>            <dd>{own.length} entries</dd>
           </dl>
           <div className="muted small" style={{marginTop:18, lineHeight:1.7, fontSize:11.5}}>
@@ -650,10 +789,12 @@ function AdminConsole({ store, projects }) {
   const [spawnTick, setSpawnTick] = _us("$");
   const [spawnBudget, setSpawnBudget] = _us("2.0");
   const [spawnBrief, setSpawnBrief] = _us("");
+  const [spawnTokenImg, setSpawnTokenImg] = _us(null);
+  const [spawnDevImg, setSpawnDevImg] = _us(null);
   const [spawnBusy, setSpawnBusy] = _us(false);
 
   void projects.tick;
-  const nextDevLabel = projects?.nextDevLabel || NN.nextDevId(NN.PROJECTS);
+  const nextPairLabel = projects?.nextPairLabel || (NN.nextTokenId(NN.PROJECTS) + " + " + NN.nextDevId(NN.PROJECTS));
 
   function inject(e) {
     e && e.preventDefault();
@@ -672,23 +813,30 @@ function AdminConsole({ store, projects }) {
   async function spawn(e) {
     e.preventDefault();
     if (!spawnCode || !spawnBrief || spawnBusy) return;
+    if (!spawnTokenImg || !spawnDevImg) {
+      setFlash("UPLOAD TOKEN + DEV IMAGES.");
+      setTimeout(() => setFlash(null), 2800);
+      return;
+    }
     setSpawnBusy(true);
     const code = spawnCode.toUpperCase();
     try {
-      const project = await projects.spawn({
-        codename: code,
-        ticker: spawnTick,
-        budget: spawnBudget,
-        thesis: spawnBrief,
-      });
-      const id = project.id;
+      const fd = new FormData();
+      fd.append("codename", code);
+      fd.append("ticker", spawnTick);
+      fd.append("budget", spawnBudget);
+      fd.append("thesis", spawnBrief);
+      fd.append("tokenImage", spawnTokenImg);
+      fd.append("devImage", spawnDevImg);
+      const project = await projects.spawn(fd);
       const wallet = project.wallet;
-      store.inject({ src:"CENTRAL",  tag:"THOUGHT", msg: `spawning ${id} for project codename "${code}". budget ${spawnBudget} SOL.` });
+      store.inject({ src:"CENTRAL", tag:"THOUGHT", msg: `spawning ${project.tokenId} + ${project.devId} for "${code}". budget ${spawnBudget} SOL.` });
       setTimeout(() => store.inject({ src:"DISPATCH", tag:"ACK", msg: `wallet ${wallet} funded with ${spawnBudget} SOL` }), 400);
-      setTimeout(() => store.inject({ src:id, tag:"BOOT", msg: `initializing. reading brief.` }), 900);
-      setTimeout(() => store.inject({ src:id, tag:"PLAN", msg: `${spawnBrief.slice(0,140)}` }), 1600);
-      setFlash(`${id} SPAWNED.`);
+      setTimeout(() => store.inject({ src:project.devId, tag:"BOOT", msg: `initializing. reading brief.` }), 900);
+      setTimeout(() => store.inject({ src:project.devId, tag:"PLAN", msg: `${spawnBrief.slice(0,140)}` }), 1600);
+      setFlash(`${project.tokenId} + ${project.devId} SPAWNED.`);
       setSpawnCode(""); setSpawnTick("$"); setSpawnBudget("2.0"); setSpawnBrief("");
+      setSpawnTokenImg(null); setSpawnDevImg(null);
       setTimeout(() => setFlash(null), 2500);
     } catch (ex) {
       setFlash(ex.message || "SPAWN FAILED.");
@@ -749,7 +897,10 @@ function AdminConsole({ store, projects }) {
                 <label className="field-label">target</label>
                 <select value={target} onChange={e => setTarget(e.target.value)}>
                   <option>ALL</option>
-                  {NN.PROJECTS.map(p => <option key={p.id}>{p.id}</option>)}
+                  {NN.PROJECTS.map(p => {
+                    const n = NN.normalizeProject(p);
+                    return <option key={n.devId} value={n.devId}>{n.devId}</option>;
+                  })}
                 </select>
               </div>
             </div>
@@ -770,7 +921,10 @@ function AdminConsole({ store, projects }) {
                 <label className="field-label">target</label>
                 <select value={target} onChange={e => setTarget(e.target.value)}>
                   <option>ALL</option>
-                  {NN.PROJECTS.map(p => <option key={p.id}>{p.id}</option>)}
+                  {NN.PROJECTS.map(p => {
+                    const n = NN.normalizeProject(p);
+                    return <option key={n.devId} value={n.devId}>{n.devId}</option>;
+                  })}
                 </select>
               </div>
               <div>
@@ -793,7 +947,10 @@ function AdminConsole({ store, projects }) {
           </form>
 
           <form onSubmit={spawn} className="card">
-            <span className="card-tag">// spawn developer</span>
+            <span className="card-tag">// spawn token + developer</span>
+            <p className="muted small" style={{ marginBottom: 14, lineHeight: 1.6 }}>
+              CENTRAL → token → dev on the map. upload both images.
+            </p>
             <div className="row">
               <div>
                 <label className="field-label">codename</label>
@@ -808,12 +965,16 @@ function AdminConsole({ store, projects }) {
                 <input type="text" value={spawnBudget} onChange={e => setSpawnBudget(e.target.value)} />
               </div>
             </div>
+            <div className="row" style={{ marginTop: 8 }}>
+              <ImageUploadField label="token image" file={spawnTokenImg} onFile={setSpawnTokenImg} />
+              <ImageUploadField label="developer brain image" file={spawnDevImg} onFile={setSpawnDevImg} />
+            </div>
             <label className="field-label" style={{marginTop:14}}>initial brief</label>
             <textarea value={spawnBrief} onChange={e => setSpawnBrief(e.target.value)}
               placeholder="one paragraph. the brief is what the developer brain reads on boot." />
             <button type="submit" className="btn btn-block swap" style={{marginTop:18, borderColor:"var(--amber)", color:"var(--amber)"}}
-              disabled={!spawnCode || !spawnBrief || spawnBusy}>
-              [ {spawnBusy ? "SPAWNING…" : "SPAWN " + nextDevLabel} ]
+              disabled={!spawnCode || !spawnBrief || !spawnTokenImg || !spawnDevImg || spawnBusy}>
+              [ {spawnBusy ? "SPAWNING…" : "SPAWN " + nextPairLabel} ]
             </button>
             <div className="muted tiny" style={{marginTop:10, letterSpacing:"0.16em", textTransform:"uppercase"}}>
               emits THOUGHT → ACK → BOOT → PLAN automatically.

@@ -170,52 +170,41 @@ function useProjectsStore() {
     return () => clearInterval(poll);
   }, [apiOnline, applyList]);
 
-  const spawn = useCallback(async ({ codename, ticker, budget, thesis }) => {
-    const code = String(codename || "").trim().toUpperCase();
-    const tickStr = (ticker || "$" + code).trim();
-    const bal = parseFloat(budget);
+  const spawn = useCallback(async (formData) => {
     if (apiOnline && API) {
-      const data = await API.spawnProject({
-        codename: code,
-        ticker: tickStr,
-        budget: Number.isFinite(bal) ? bal : 2,
-        thesis: String(thesis || "").trim(),
-      });
+      const data = await API.spawnProject(formData);
       const p = N.normalizeProject(data.project);
-      if (!N.PROJECTS.some((x) => x.id === p.id)) N.PROJECTS.push(p);
-      else N.replaceProjects(N.PROJECTS.map((x) => (x.id === p.id ? p : x)));
+      const exists = N.PROJECTS.some((x) => x.tokenId === p.tokenId || x.devId === p.devId);
+      if (!exists) N.PROJECTS.push(p);
+      else N.replaceProjects(N.PROJECTS.map((x) =>
+        (x.tokenId === p.tokenId || x.devId === p.devId) ? p : x
+      ));
       setNextDev(data.nextDev ?? N.nextDevNumberFrom(N.PROJECTS));
       N.saveProjectsLocal(N.PROJECTS);
       bump();
       return p;
     }
-    const id = N.nextDevId(N.PROJECTS);
-    const wallet = "Z" + Math.random().toString(36).slice(2, 8).toUpperCase() + "…" +
-      Math.random().toString(36).slice(2, 6).toUpperCase();
-    const p = N.normalizeProject({
-      id,
-      codename: code,
-      ticker: tickStr.startsWith("$") ? tickStr : "$" + tickStr.replace(/^\$/, ""),
-      status: "booting",
-      launched: Date.now(),
-      wallet,
-      balance: Number.isFinite(bal) ? bal : 2,
-      marketCap: 0,
-      holders: 0,
-      thesis: String(thesis || "").trim(),
-      agents: [],
-      pumpfun: null,
-    });
-    N.PROJECTS.push(p);
-    setNextDev(N.nextDevNumberFrom(N.PROJECTS));
-    N.saveProjectsLocal(N.PROJECTS);
-    bump();
-    return p;
+    throw new Error("backend offline — run server to spawn with images");
   }, [apiOnline, bump]);
 
-  const nextDevLabel = "DEV-" + String(nextDev).padStart(3, "0");
+  const hireAgent = useCallback(async (projectKey, formData) => {
+    if (apiOnline && API) {
+      const data = await API.hireAgent(projectKey, formData);
+      const p = N.normalizeProject(data.project);
+      N.replaceProjects(N.PROJECTS.map((x) =>
+        (x.tokenId === p.tokenId || x.devId === p.devId || x.id === p.id) ? p : x
+      ));
+      N.saveProjectsLocal(N.PROJECTS);
+      bump();
+      return data.agent;
+    }
+    throw new Error("backend offline — run server to hire agents");
+  }, [apiOnline, bump]);
 
-  return { tick, spawn, nextDev, nextDevLabel, apiOnline };
+  const pad = String(nextDev).padStart(3, "0");
+  const nextPairLabel = `TKN-${pad} + DEV-${pad}`;
+
+  return { tick, spawn, hireAgent, nextDev, nextPairLabel, apiOnline };
 }
 
 /* ---------------- header + nav ---------------- */
@@ -438,32 +427,39 @@ function BubbleMap({ entries, now, projectsTick }) {
     const R = 32; // % of half min dimension
     return { x: 50 + Math.cos(angle) * R, y: 50 + Math.sin(angle) * R, angle };
   }
+  function devPos(parentAngle, tokenX, tokenY) {
+    const r = 10;
+    return {
+      x: tokenX + Math.cos(parentAngle) * r,
+      y: tokenY + Math.sin(parentAngle) * r,
+    };
+  }
   function agentPos(parentAngle, j, total, parentX, parentY) {
-    // arc of ±60 deg facing outward
-    const arcWidth = Math.PI * 0.7;
+    const arcWidth = Math.PI * 0.85;
     const start = parentAngle - arcWidth / 2;
     const step = total === 1 ? 0 : arcWidth / (total - 1);
-    const a = total === 1 ? parentAngle : start + step * j;
-    const r = 11; // % radius from parent token
+    const a = total === 1 ? parentAngle + 0.35 : start + step * j;
+    const r = 12;
     return {
       x: parentX + Math.cos(a) * r,
       y: parentY + Math.sin(a) * r,
     };
   }
 
-  // Build edge points for svg
   const edges = [];
-  const tokenCoords = tokens.map((p, i) => {
+  tokens.forEach((p, i) => {
     const tp = tokenPos(i, tokens.length);
+    const dp = devPos(tp.angle, tp.x, tp.y);
+    p.__pos = tp;
+    p.__devPos = dp;
     edges.push({ x1: 50, y1: 50, x2: tp.x, y2: tp.y, type: "central" });
+    edges.push({ x1: tp.x, y1: tp.y, x2: dp.x, y2: dp.y, type: "dev", parentStatus: p.status });
     const agents = p.agents || [];
     for (let j = 0; j < agents.length; j++) {
       const ap = agentPos(tp.angle, j, agents.length, tp.x, tp.y);
       edges.push({ x1: tp.x, y1: tp.y, x2: ap.x, y2: ap.y, type: "agent", parentStatus: p.status });
       agents[j].__pos = ap;
     }
-    p.__pos = tp;
-    return tp;
   });
 
   const worldStyle = {
@@ -572,7 +568,7 @@ function BubbleMap({ entries, now, projectsTick }) {
               {edges.map((e, i) => (
                 <line key={i}
                       x1={e.x1} y1={e.y1} x2={e.x2} y2={e.y2}
-                      stroke={e.type === "central" ? "rgba(142,255,193,0.18)" : e.parentStatus === "degraded" ? "rgba(255,194,138,0.12)" : "rgba(255,255,255,0.08)"}
+                      stroke={e.type === "central" ? "rgba(142,255,193,0.18)" : e.type === "dev" ? "rgba(142,255,193,0.1)" : e.parentStatus === "degraded" ? "rgba(255,194,138,0.12)" : "rgba(255,255,255,0.08)"}
                       strokeWidth="0.12"
                       strokeDasharray={e.type === "agent" ? "0.6 0.6" : "0"} />
               ))}
@@ -591,19 +587,39 @@ function BubbleMap({ entries, now, projectsTick }) {
 
               {tokens.map((p, i) => {
                 const tp = p.__pos;
-                const tokenActive = recentlyActive.has(p.id) ||
+                const tid = p.tokenId || p.id;
+                const tokenActive = recentlyActive.has(tid) || recentlyActive.has(p.devId) ||
                                     (p.agents || []).some(a => recentlyActive.has(a.id));
                 return (
                   <BubbleNode
-                    key={p.id}
+                    key={tid}
                     x={tp.x} y={tp.y} size={96}
                     cls={"token " + p.status}
-                    to={"/node/" + p.id}
+                    to={"/node/" + tid}
                     inner={<TokenGlyph project={p} size={96} frame={false} />}
                     label={p.ticker !== "—" ? p.ticker : p.codename}
-                    name={p.id}
+                    name={tid}
                     active={tokenActive}
                     style={{animationDelay: (i * 0.6) + "s"}}
+                  />
+                );
+              })}
+
+              {tokens.map((p, i) => {
+                const dp = p.__devPos;
+                if (!dp) return null;
+                const dev = N.devAgentFor(p);
+                return (
+                  <BubbleNode
+                    key={p.devId}
+                    x={dp.x} y={dp.y} size={72}
+                    cls="dev"
+                    to={"/node/" + p.devId}
+                    inner={<Avatar agent={dev} size={72} frame={false} />}
+                    label={p.devId}
+                    name={p.codename}
+                    active={recentlyActive.has(p.devId)}
+                    style={{animationDelay: (i * 0.6 + 0.2) + "s"}}
                   />
                 );
               })}
@@ -616,7 +632,7 @@ function BubbleMap({ entries, now, projectsTick }) {
                     x={ap.x} y={ap.y} size={56}
                     cls="agent"
                     to={"/node/" + a.id}
-                    inner={<Avatar agent={a} size={56} frame={false} />}
+                    inner={<Avatar agent={a} size={56} frame={false} imageSrc={a.imageUrl} />}
                     label={a.name}
                     name=""
                     active={recentlyActive.has(a.id)}
@@ -688,7 +704,7 @@ function App() {
     content = <CastPage projectsTick={projects.tick} />;
   } else if (path.startsWith("/node/")) {
     const id = path.replace("/node/", "");
-    content = <NodeDetailPage id={id} entries={log.entries} now={now} />;
+    content = <NodeDetailPage id={id} entries={log.entries} now={now} projects={projects} />;
   } else if (path === "/admin") {
     content = <AdminPage store={log} projects={projects} />;
   } else if (path === "/manifest") {

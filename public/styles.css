@@ -573,6 +573,25 @@ pre.ascii .h-sub  { color: var(--azure); }
 .bubble.token.live .b-disc { animation: token-pulse 2.6s ease-in-out infinite; }
 .bubble.token.degraded .b-disc { border-color: var(--amber); }
 .bubble.token.archived .b-disc { opacity: 0.45; }
+.bubble.dev .b-disc { border-color: rgba(142,255,193,0.35); }
+.bubble.dev:hover .b-disc { border-color: var(--accent); }
+
+.upload-preview {
+  width: 72px; height: 72px; border-radius: 8px;
+  object-fit: cover; border: 1px solid var(--border-2);
+  margin-top: 8px;
+}
+.hire-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 12px;
+  margin-top: 12px;
+}
+.hire-tile {
+  border: 1px solid var(--border);
+  padding: 12px;
+  background: var(--surface);
+}
 .bubble.agent .b-disc { background: transparent; }
 
 /* activity pulse (rendered when a node emitted recently) */

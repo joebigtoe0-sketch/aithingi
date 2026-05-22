@@ -61,6 +61,12 @@ const AVATAR_TYPES = {
     shade: "#6f6f6f",
     accent: "#2a2a2a",
   },
+  dev: {
+    label: "DEV BRAIN",
+    body: "#8a9a7a",
+    shade: "#5f6f55",
+    accent: "#2a3328",
+  },
 };
 window.AVATAR_TYPES = AVATAR_TYPES;
 
@@ -96,6 +102,15 @@ function Avatar({ agent, size = 96, frame = true, label = false, imageSrc = null
   // ---------- central brain — pre-rendered #000 asset ----------
   if (agent.type === "central") {
     return <CentralBrainFigure agent={agent} size={size} frame={frame} label={label} imageSrc={imageSrc || "/centralbrain.png"} />;
+  }
+
+  const customImg = imageSrc || agent.imageUrl;
+  if (customImg) {
+    return (
+      <FigureFrame size={size} frame={frame} type={agent.type} num={agent.num} label={label ? agent.name : null}>
+        <img src={customImg} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+      </FigureFrame>
+    );
   }
 
   return (
@@ -323,17 +338,28 @@ function hexLight(hex) {
    subtle hatched square with codename + ticker
    ============================================================ */
 function TokenGlyph({ project, size = 84, frame = true }) {
-  const seed = project.id.charCodeAt(project.id.length-1) + (project.ticker || "").length;
+  const pid = project.tokenId || project.id;
+  if (project.tokenImage) {
+    const img = <img src={project.tokenImage} alt="" width={size} height={size}
+      style={{ width: size, height: size, objectFit: "cover", display: "block", borderRadius: frame ? 0 : 4 }} />;
+    if (!frame) return img;
+    return (
+      <div className="token-glyph" style={{ width: size }}>
+        <div className="token-glyph-inner">{img}</div>
+      </div>
+    );
+  }
+  const seed = pid.charCodeAt(pid.length - 1) + (project.ticker || "").length;
   const tint = ["#3a2929","#2a3a3a","#3a3422","#2a2e3a","#3a2a36"][seed % 5];
   const stripe = ["#5a4040","#405a5a","#5a5236","#404a5a","#5a3f54"][seed % 5];
   if (!frame) {
     return (
       <svg viewBox="0 0 100 100" width={size} height={size}>
         <rect width="100" height="100" fill={tint} />
-        <pattern id={`hatch-${project.id}`} width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+        <pattern id={`hatch-${pid}`} width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
           <line x1="0" y1="0" x2="0" y2="6" stroke={stripe} strokeWidth="1" />
         </pattern>
-        <rect width="100" height="100" fill={`url(#hatch-${project.id})`} opacity="0.5" />
+        <rect width="100" height="100" fill={`url(#hatch-${pid})`} opacity="0.5" />
         <text x="50" y="48" textAnchor="middle" fill="#e6e6e6" fontFamily="JetBrains Mono, monospace" fontSize="9" letterSpacing="2">{project.codename.slice(0,8)}</text>
         <text x="50" y="62" textAnchor="middle" fill="#e6e6e6" fontFamily="JetBrains Mono, monospace" fontSize="11" fontWeight="600">{project.ticker}</text>
       </svg>

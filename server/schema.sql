@@ -22,7 +22,11 @@ CREATE TABLE IF NOT EXISTS projects (
   holders INT,
   thesis TEXT,
   subagents JSONB NOT NULL DEFAULT '[]',
-  pumpfun TEXT
+  pumpfun TEXT,
+  token_id TEXT,
+  dev_id TEXT,
+  token_image TEXT,
+  dev_image TEXT
 );
 
 CREATE TABLE IF NOT EXISTS settings (

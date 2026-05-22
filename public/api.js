@@ -18,6 +18,17 @@
     return data;
   }
 
+  async function requestMultipart(path, formData, method = "POST") {
+    const url = baseUrl() + "/api" + path;
+    const headers = {};
+    const token = sessionStorage.getItem(TOKEN_KEY);
+    if (token) headers.Authorization = "Bearer " + token;
+    const res = await fetch(url, { method, body: formData, headers });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || res.statusText || "request failed");
+    return data;
+  }
+
   let _config = null;
   let _online = null;
 
@@ -63,11 +74,12 @@
       return request("/projects");
     },
 
-    async spawnProject({ codename, ticker, budget, thesis }) {
-      return request("/projects", {
-        method: "POST",
-        body: JSON.stringify({ codename, ticker, budget, thesis }),
-      });
+    async spawnProject(formData) {
+      return requestMultipart("/projects", formData);
+    },
+
+    async hireAgent(projectKey, formData) {
+      return requestMultipart("/projects/" + encodeURIComponent(projectKey) + "/agents", formData);
     },
 
     async inject(entry) {

@@ -20,6 +20,7 @@ app.set("trust proxy", 1);
 
 app.use(cors({ origin: true, credentials: true }));
 app.use(express.json({ limit: "256kb" }));
+app.use(express.urlencoded({ extended: true, limit: "256kb" }));
 
 app.use("/api", createApiRouter());
 

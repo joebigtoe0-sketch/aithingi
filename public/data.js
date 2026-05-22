@@ -31,17 +31,46 @@ const DISPATCH = {
 const PROJECTS = [];
 const PROJECTS_KEY = "network_projects_v1";
 
+const CONTRACTOR_TYPES = ["builder", "voice", "watcher", "art", "shill", "comms", "analytics"];
+
+function pairNumFromId(id) {
+  if (!id) return 0;
+  const m = /^(?:TKN|DEV)-(\d+)$/i.exec(id);
+  return m ? parseInt(m[1], 10) : 0;
+}
+
 function nextDevNumberFrom(projects) {
   let max = 0;
-  for (const p of projects) {
-    const m = /^DEV-(\d+)$/i.exec(p.id);
-    if (m) max = Math.max(max, parseInt(m[1], 10));
+  for (const p of projects || PROJECTS) {
+    max = Math.max(max, pairNumFromId(p.id), pairNumFromId(p.tokenId), pairNumFromId(p.devId));
   }
   return max + 1;
 }
 
 function nextDevId(projects) {
   return "DEV-" + String(nextDevNumberFrom(projects || PROJECTS)).padStart(3, "0");
+}
+
+function nextTokenId(projects) {
+  return "TKN-" + String(nextDevNumberFrom(projects || PROJECTS)).padStart(3, "0");
+}
+
+function normalizeProject(p) {
+  if (!p) return p;
+  const rawId = p.id || "";
+  let devId = p.devId || null;
+  let tokenId = p.tokenId || null;
+  if (rawId.startsWith("DEV-") && !devId) devId = rawId;
+  if (rawId.startsWith("TKN-") && !tokenId) tokenId = rawId;
+  const numMatch = (devId || tokenId || rawId).match(/(\d+)/);
+  const pad = numMatch ? String(parseInt(numMatch[1], 10)).padStart(3, "0") : "001";
+  devId = devId || "DEV-" + pad;
+  tokenId = tokenId || "TKN-" + pad;
+  return Object.assign({}, p, {
+    devId,
+    tokenId,
+    agents: p.agents || [],
+  });
 }
 
 function loadProjectsLocal() {
@@ -117,12 +146,26 @@ function findAgent(id) {
   }
   return null;
 }
-function findProject(id) { return PROJECTS.find(p => p.id === id); }
+function findProject(id) {
+  const k = (id || "").toUpperCase();
+  return PROJECTS.find((p) => p.id === k || p.tokenId === k || p.devId === k);
+}
 function projectOfAgent(agentId) {
   for (const p of PROJECTS) {
     for (const a of (p.agents || [])) if (a.id === agentId) return p;
   }
   return null;
+}
+function devAgentFor(project) {
+  const p = normalizeProject(project);
+  return {
+    id: p.devId,
+    type: "dev",
+    num: p.devId.replace("DEV-", ""),
+    name: p.codename + " BRAIN",
+    seed: (p.codename.charCodeAt(0) || 1) + parseInt(p.devId.replace(/\D/g, "") || 1, 10),
+    imageUrl: p.devImage || null,
+  };
 }
 
 function srcColor(src) {
@@ -167,10 +210,10 @@ function uptimeShort(launched) {
 
 window.NETWORK = {
   CENTRAL, DISPATCH, PROJECTS,
-  PROJECTS_KEY,
+  PROJECTS_KEY, CONTRACTOR_TYPES,
   loadLog, saveLog, genTickEntry,
   loadProjectsLocal, saveProjectsLocal, replaceProjects, normalizeProject,
-  nextDevId, nextDevNumberFrom,
+  nextDevId, nextTokenId, nextDevNumberFrom, devAgentFor,
   findAgent, findProject, projectOfAgent, srcAgent,
   srcColor, shortWallet, fmtBalance, fmtMcap,
   uptimeStr, uptimeShort, deployTs, isoTs,
