@@ -417,17 +417,23 @@ pre.ascii .h-sub  { color: var(--azure); }
 .figure-inner .mitosis-figure {
   width: 100%;
   height: 100%;
+  padding: 0;
+  box-sizing: border-box;
+}
+.mitosis-figure {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 2%;
+  overflow: hidden;
   box-sizing: border-box;
 }
-.mitosis-figure svg,
-.figure-inner .mitosis-figure svg {
+.mitosis-figure svg {
   display: block;
-  width: 108%;
-  height: 108%;
+  width: 100%;
+  height: 100%;
+  flex: none;
+  transform: scale(1.08);
+  transform-origin: center center;
 }
 .figure-num {
   position: absolute;
@@ -487,18 +493,6 @@ pre.ascii .h-sub  { color: var(--azure); }
   text-align: center;
   padding: 8px;
 }
-.map-stage .mitosis-figure {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-}
-.map-stage .mitosis-figure svg {
-  display: block;
-  width: 108%;
-  height: 108%;
-}
-
 /* ============================================================
    BUBBLE MAP — full viewport + pan/zoom
    ============================================================ */
@@ -597,6 +591,9 @@ pre.ascii .h-sub  { color: var(--azure); }
   background: var(--surface);
   overflow: hidden;
   position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   transition: border-color 0.2s, transform 0.2s, box-shadow 0.2s;
   box-shadow: 0 6px 20px rgba(0,0,0,0.45);
 }

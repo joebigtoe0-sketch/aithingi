@@ -89,7 +89,7 @@ function FigureFrame({ children, size, frame, type, num, label, tint }) {
   const bg = tint || t.body;
   if (!frame) {
     return (
-      <div style={{ width: size, position: "relative", display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <div className="mitosis-figure" style={{ width: size, height: size }}>
         {children}
       </div>
     );
