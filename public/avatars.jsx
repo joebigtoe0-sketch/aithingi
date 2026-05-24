@@ -55,12 +55,15 @@ function buildSvgForAgent(agent, project) {
   return M.buildFigureFromSeed(seed, { number: num, label: (agent.name || agent.type || "").split(" ")[0].toUpperCase() });
 }
 
-function MitosisSvg({ svg, width }) {
+function MitosisSvg({ svg, width, height, fill }) {
   if (!svg) return null;
-  const h = Math.round(width * (190 / 152));
+  const style = fill
+    ? { width: "100%", height: "100%" }
+    : { width, height: height ?? Math.round(width * (190 / 152)) };
   return (
     <div
-      style={{ width, height: h, lineHeight: 0, overflow: "hidden" }}
+      className="mitosis-figure"
+      style={style}
       dangerouslySetInnerHTML={{ __html: svg }}
     />
   );
@@ -69,8 +72,9 @@ function MitosisSvg({ svg, width }) {
 function Avatar({ agent, size = 96, frame = true, label = false, project = null }) {
   if (!agent) return null;
   const svg = buildSvgForAgent(agent, project);
-  const innerW = frame ? Math.max(48, size - 10) : size;
-  const inner = <MitosisSvg svg={svg} width={innerW} />;
+  const inner = frame
+    ? <MitosisSvg svg={svg} fill />
+    : <MitosisSvg svg={svg} width={size} height={size} />;
   const t = AVATAR_TYPES[agent.type] || AVATAR_TYPES.builder;
   const num = agent.type === "central" ? "000" : String(agentNumber(agent)).padStart(3, "0");
   return (
@@ -92,7 +96,7 @@ function FigureFrame({ children, size, frame, type, num, label, tint }) {
   }
   return (
     <div className="figure-frame" style={{ width: size, "--fg-shade": t.shade }}>
-      <div className="figure-inner" style={{ background: hexLight(bg), display: "flex", alignItems: "center", justifyContent: "center", minHeight: size - 12 }}>
+      <div className="figure-inner" style={{ background: hexLight(bg) }}>
         {children}
         <div className="figure-num">#{num}</div>
       </div>
@@ -116,16 +120,21 @@ function hexLight(hex) {
 }
 
 function TokenGlyph({ project, size = 84, frame = true }) {
-  const M = window.MITOSIS;
-  const seed = project.tokenMint || project.tokenId || project.id || project.codename;
-  const num = parseInt(String(project.devId || project.tokenId || "").replace(/\D/g, ""), 10) || 1;
-  const tick = (project.ticker || project.codename || "TKN").replace(/^\$/, "").slice(0, 8).toUpperCase();
-  const svg = M ? M.buildFigureFromSeed(seed, { number: num, label: tick }) : "";
-  const inner = <MitosisSvg svg={svg} width={frame ? size - 8 : size} />;
-  if (!frame) return inner;
+  const img = project?.tokenImage || project?.token_image;
+  const innerSize = frame ? size - 8 : size;
+  const inner = img
+    ? <img src={img} alt="" className="token-glyph-img" />
+    : <div className="token-glyph-placeholder muted tiny">no image</div>;
+  if (!frame) {
+    return (
+      <div className="token-glyph-bare" style={{ width: innerSize, height: innerSize }}>
+        {inner}
+      </div>
+    );
+  }
   return (
     <div className="token-glyph" style={{ width: size }}>
-      <div className="token-glyph-inner" style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <div className="token-glyph-inner">
         {inner}
       </div>
     </div>

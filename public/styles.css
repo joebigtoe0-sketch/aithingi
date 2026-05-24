@@ -414,6 +414,21 @@ pre.ascii .h-sub  { color: var(--azure); }
   display: block;
   padding: 6%;
 }
+.figure-inner .mitosis-figure {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6%;
+  box-sizing: border-box;
+}
+.mitosis-figure svg,
+.figure-inner .mitosis-figure svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
 .figure-num {
   position: absolute;
   bottom: 6px; right: 8px;
@@ -443,6 +458,44 @@ pre.ascii .h-sub  { color: var(--azure); }
   aspect-ratio: 1/1;
   display: flex;
   align-items: center; justify-content: center;
+  overflow: hidden;
+}
+.token-glyph-img,
+.token-glyph-bare .token-glyph-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+  padding: 6%;
+  box-sizing: border-box;
+}
+.token-glyph-bare {
+  border-radius: 50%;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface);
+}
+.token-glyph-bare .token-glyph-img {
+  padding: 4%;
+}
+.token-glyph-placeholder {
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  text-align: center;
+  padding: 8px;
+}
+.map-stage .mitosis-figure {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.map-stage .mitosis-figure svg {
+  display: block;
+  width: 100%;
+  height: 100%;
 }
 
 /* ============================================================

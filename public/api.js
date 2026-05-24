@@ -81,8 +81,11 @@
       });
     },
 
-    async spawnProject(body) {
-      return request("/projects", { method: "POST", body: JSON.stringify(body) });
+    async spawnProject(formDataOrBody) {
+      if (formDataOrBody instanceof FormData) {
+        return requestMultipart("/projects", formDataOrBody);
+      }
+      return request("/projects", { method: "POST", body: JSON.stringify(formDataOrBody) });
     },
 
     async hireAgent(projectKey, body) {

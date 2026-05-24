@@ -304,6 +304,18 @@ function MetricHero({ tag, value, sub, spark, color }) {
   );
 }
 
+function ImageUploadField({ label, file, onFile, previewUrl }) {
+  const url = previewUrl || (file ? URL.createObjectURL(file) : null);
+  return (
+    <div style={{ marginTop: 10 }}>
+      <label className="field-label">{label}</label>
+      <input type="file" accept="image/jpeg,image/png,image/webp,image/gif"
+        onChange={(e) => onFile(e.target.files?.[0] || null)} />
+      {url && <img src={url} alt="" className="upload-preview" />}
+    </div>
+  );
+}
+
 function NodeDetailPage({ id, entries, now, projects, store }) {
   if (id === "CENTRAL") return <CentralNodeDetail entries={entries} />;
   if (id === "DISPATCH") return <DispatchNodeDetail entries={entries} />;
@@ -956,6 +968,7 @@ function AdminConsole({ store, projects }) {
   const [spawnBrief, setSpawnBrief] = _us("");
   const [spawnWallet, setSpawnWallet] = _us("");
   const [spawnMint, setSpawnMint] = _us("");
+  const [spawnTokenImg, setSpawnTokenImg] = _us(null);
   const [spawnBusy, setSpawnBusy] = _us(false);
 
   void projects.tick;
@@ -978,6 +991,11 @@ function AdminConsole({ store, projects }) {
   async function spawn(e) {
     e.preventDefault();
     if (!spawnCode || !spawnBrief || spawnBusy) return;
+    if (!spawnTokenImg) {
+      setFlash("UPLOAD TOKEN IMAGE.");
+      setTimeout(() => setFlash(null), 2800);
+      return;
+    }
     if (!spawnWallet.trim() || !spawnMint.trim()) {
       setFlash("WALLET + TOKEN MINT REQUIRED.");
       setTimeout(() => setFlash(null), 2800);
@@ -986,14 +1004,15 @@ function AdminConsole({ store, projects }) {
     setSpawnBusy(true);
     const code = spawnCode.toUpperCase();
     try {
-      const project = await projects.spawn({
-        codename: code,
-        ticker: spawnTick,
-        budget: spawnBudget,
-        thesis: spawnBrief,
-        wallet: spawnWallet.trim(),
-        tokenMint: spawnMint.trim(),
-      });
+      const fd = new FormData();
+      fd.append("codename", code);
+      fd.append("ticker", spawnTick);
+      fd.append("budget", spawnBudget);
+      fd.append("thesis", spawnBrief);
+      fd.append("wallet", spawnWallet.trim());
+      fd.append("tokenMint", spawnMint.trim());
+      fd.append("tokenImage", spawnTokenImg);
+      const project = await projects.spawn(fd);
       const wallet = project.wallet;
       store.inject({ src:"CENTRAL", tag:"THOUGHT", msg: `spawning ${project.tokenId} + ${project.devId} for "${code}". budget ${spawnBudget} SOL.` });
       setTimeout(() => store.inject({ src:"DISPATCH", tag:"ACK", msg: `wallet ${wallet} funded with ${spawnBudget} SOL` }), 400);
@@ -1002,6 +1021,7 @@ function AdminConsole({ store, projects }) {
       setFlash(`${project.tokenId} + ${project.devId} SPAWNED.`);
       setSpawnCode(""); setSpawnTick("$"); setSpawnBudget("2.0"); setSpawnBrief("");
       setSpawnWallet(""); setSpawnMint("");
+      setSpawnTokenImg(null);
       setTimeout(() => setFlash(null), 2500);
     } catch (ex) {
       setFlash(ex.message || "SPAWN FAILED.");
@@ -1118,7 +1138,7 @@ function AdminConsole({ store, projects }) {
           <form onSubmit={spawn} className="card">
             <span className="card-tag">// spawn token + developer</span>
             <p className="muted small" style={{ marginBottom: 14, lineHeight: 1.6 }}>
-              CENTRAL → token → dev on the map. figures generate from wallet + mint seeds.
+              CENTRAL → token → dev on the map. upload token image; agent figures generate automatically.
             </p>
             <div className="row">
               <div>
@@ -1146,11 +1166,12 @@ function AdminConsole({ store, projects }) {
                   placeholder="mint address…" style={{ fontSize: 11 }} />
               </div>
             </div>
+            <ImageUploadField label="token image" file={spawnTokenImg} onFile={setSpawnTokenImg} />
             <label className="field-label" style={{marginTop:14}}>initial brief</label>
             <textarea value={spawnBrief} onChange={e => setSpawnBrief(e.target.value)}
               placeholder="one paragraph. the brief is what the developer brain reads on boot." />
             <button type="submit" className="btn btn-block swap" style={{marginTop:18, borderColor:"var(--amber)", color:"var(--amber)"}}
-              disabled={!spawnCode || !spawnBrief || !spawnWallet.trim() || !spawnMint.trim() || spawnBusy}>
+              disabled={!spawnCode || !spawnBrief || !spawnWallet.trim() || !spawnMint.trim() || !spawnTokenImg || spawnBusy}>
               [ {spawnBusy ? "SPAWNING…" : "SPAWN " + nextPairLabel} ]
             </button>
             <div className="muted tiny" style={{marginTop:10, letterSpacing:"0.16em", textTransform:"uppercase"}}>

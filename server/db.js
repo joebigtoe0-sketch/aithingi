@@ -217,7 +217,7 @@ export async function createDeveloperProject(opts) {
 }
 
 export async function createTokenPair({
-  codename, ticker, budget, thesis, wallet, tokenMint,
+  codename, ticker, budget, thesis, wallet, tokenMint, tokenImage,
 }) {
   const num = await getNextPairNumber();
   const pad = String(num).padStart(3, "0");
@@ -250,6 +250,7 @@ export async function createTokenPair({
     thesis: String(thesis || "").trim(),
     agents: [],
     pumpfun: `https://pump.fun/coin/${mint}`,
+    tokenImage: tokenImage || null,
   });
   const inserted = await insertProject(project);
   return syncProjectMetrics(inserted, { force: true });

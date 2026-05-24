@@ -14,6 +14,30 @@ function ext(file) {
   return path.extname(file.originalname || "") || ".jpg";
 }
 
+export const tokenSpawnUpload = multer({
+  storage: multer.diskStorage({
+    async destination(req, _file, cb) {
+      try {
+        if (req.pairNum == null) req.pairNum = await getNextPairNumber();
+        const dir = path.join(UPLOAD_ROOT, "tokens");
+        ensureDir(dir);
+        cb(null, dir);
+      } catch (err) {
+        cb(err);
+      }
+    },
+    filename(req, file, cb) {
+      const pad = String(req.pairNum || 1).padStart(3, "0");
+      cb(null, `TKN-${pad}${ext(file)}`);
+    },
+  }),
+  limits: { fileSize: 3 * 1024 * 1024 },
+  fileFilter(_req, file, cb) {
+    if (!ALLOWED.has(file.mimetype)) return cb(new Error("only JPEG, PNG, WebP, or GIF images are allowed"));
+    cb(null, true);
+  },
+}).single("tokenImage");
+
 export const pairSpawnUpload = multer({
   storage: multer.diskStorage({
     async destination(req, file, cb) {

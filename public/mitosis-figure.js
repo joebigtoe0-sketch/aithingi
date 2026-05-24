@@ -95,7 +95,7 @@
     const cap = label
       ? `<text x="76" y="172" text-anchor="middle" fill="#a99a82" font-family="monospace" font-size="10" letter-spacing="1">${label}</text>`
       : "";
-    return `<svg xmlns="http://www.w3.org/2000/svg" width="160" height="190" viewBox="0 0 152 190" role="img"><title>${label || "agent figure"}${number != null ? " #" + number : ""}</title>` +
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 152 190" preserveAspectRatio="xMidYMid meet" role="img"><title>${label || "agent figure"}${number != null ? " #" + number : ""}</title>` +
       `<ellipse cx="76" cy="150" rx="40" ry="7" fill="#000" opacity="0.22"/>` +
       limbs(limbKind, fill) +
       `<path d="${path}" fill="${fill}" stroke="${INK}" stroke-width="5" stroke-linejoin="round"/>` +

@@ -16,6 +16,8 @@ import {
   hasDatabase,
 } from "./db.js";
 import { isAlchemyConfigured } from "./metrics.js";
+import { publicUrl } from "./upload.js";
+import { tokenSpawnUpload } from "./spawn-upload.js";
 import { generateCentralMessage, generateEntityMessage, isAiConfigured } from "./ai.js";
 
 const ADMIN_TOKEN_KEY = "admin_token";
@@ -138,15 +140,22 @@ export function createApiRouter() {
     }
   });
 
-  api.post("/projects", requireAdmin, async (req, res) => {
+  api.post("/projects", requireAdmin, (req, res, next) => {
+    tokenSpawnUpload(req, res, (err) => {
+      if (err) return res.status(400).json({ error: err.message || "upload failed" });
+      next();
+    });
+  }, async (req, res) => {
     try {
       const { codename, ticker, budget, thesis, wallet, tokenMint } = req.body || {};
       if (!codename?.trim()) return res.status(400).json({ error: "codename required" });
       if (!thesis?.trim()) return res.status(400).json({ error: "brief required" });
       if (!wallet?.trim()) return res.status(400).json({ error: "dev wallet address required" });
       if (!tokenMint?.trim()) return res.status(400).json({ error: "token contract address required" });
+      if (!req.file) return res.status(400).json({ error: "token image required" });
+      const tokenImage = publicUrl("tokens", req.file.filename);
       const project = await createDeveloperProject({
-        codename, ticker, budget, thesis, wallet, tokenMint,
+        codename, ticker, budget, thesis, wallet, tokenMint, tokenImage,
       });
       const nextDev = await getNextPairNumber();
       res.status(201).json({ project, nextDev });
