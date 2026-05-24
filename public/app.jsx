@@ -170,9 +170,9 @@ function useProjectsStore() {
     return () => clearInterval(poll);
   }, [apiOnline, applyList]);
 
-  const spawn = useCallback(async (formData) => {
+  const spawn = useCallback(async (payload) => {
     if (apiOnline && API) {
-      const data = await API.spawnProject(formData);
+      const data = await API.spawnProject(payload);
       const p = N.normalizeProject(data.project);
       const exists = N.PROJECTS.some((x) => x.tokenId === p.tokenId || x.devId === p.devId);
       if (!exists) N.PROJECTS.push(p);
@@ -184,12 +184,12 @@ function useProjectsStore() {
       bump();
       return p;
     }
-    throw new Error("backend offline — run server to spawn with images");
+    throw new Error("backend offline — run server to spawn projects");
   }, [apiOnline, bump]);
 
-  const hireAgent = useCallback(async (projectKey, formData) => {
+  const hireAgent = useCallback(async (projectKey, payload) => {
     if (apiOnline && API) {
-      const data = await API.hireAgent(projectKey, formData);
+      const data = await API.hireAgent(projectKey, payload);
       const p = N.normalizeProject(data.project);
       N.replaceProjects(N.PROJECTS.map((x) =>
         (x.tokenId === p.tokenId || x.devId === p.devId || x.id === p.id) ? p : x
@@ -297,6 +297,9 @@ function BootScreen({ onDone }) {
 /* ---------------- log entry render ---------------- */
 function LogEntry({ e, animate, withAvatar = true }) {
   const agent = N.srcAgent(e.src);
+  const project = agent
+    ? (agent.type === "dev" ? N.findProject(e.src) : N.projectOfAgent(agent.id))
+    : null;
   const c = N.srcColor(e.src);
   const tagColor =
     e.tag === "ERROR"     ? "err" :
@@ -313,7 +316,7 @@ function LogEntry({ e, animate, withAvatar = true }) {
       <span className={"log-src " + c} style={{display:"inline-flex", alignItems:"center", gap:8}}>
         {withAvatar && agent && (
           <span style={{width:18, height:18, display:"inline-flex"}}>
-            <Avatar agent={agent} size={18} frame={false} />
+            <Avatar agent={agent} size={18} frame={false} project={project} />
           </span>
         )}
         [{e.src}]
@@ -581,7 +584,7 @@ function BubbleMap({ entries, now, projectsTick }) {
                 x={50} y={50} size={148}
                 cls="central"
                 to="/node/CENTRAL"
-                inner={<Avatar agent={N.CENTRAL} size={140} frame={false} imageSrc="/centralbrain.png" />}
+                inner={<Avatar agent={N.CENTRAL} size={140} frame={false} />}
                 label="#000 · CENTRAL BRAIN"
                 name=""
                 active={recentlyActive.has("CENTRAL")}
@@ -618,7 +621,7 @@ function BubbleMap({ entries, now, projectsTick }) {
                     x={dp.x} y={dp.y} size={72}
                     cls="dev"
                     to={"/node/" + devId}
-                    inner={<Avatar agent={dev} size={72} frame={false} imageSrc={p.devImage} />}
+                    inner={<Avatar agent={dev} size={72} frame={false} project={p} />}
                     label={devId}
                     name={p.codename}
                     active={recentlyActive.has(devId)}
@@ -635,7 +638,7 @@ function BubbleMap({ entries, now, projectsTick }) {
                     x={ap.x} y={ap.y} size={56}
                     cls="agent"
                     to={"/node/" + a.id}
-                    inner={<Avatar agent={a} size={56} frame={false} imageSrc={a.imageUrl} />}
+                    inner={<Avatar agent={a} size={56} frame={false} project={p} />}
                     label={a.name}
                     name=""
                     active={recentlyActive.has(a.id)}

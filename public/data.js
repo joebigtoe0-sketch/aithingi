@@ -72,8 +72,6 @@ function normalizeProject(p) {
   const rawId = String(p.id || "");
   let devId = p.devId || p.dev_id || null;
   let tokenId = p.tokenId || p.token_id || null;
-  const tokenImage = p.tokenImage || p.token_image || null;
-  const devImage = p.devImage || p.dev_image || null;
   const tokenMint = p.tokenMint || p.token_mint || null;
   const balance = Number(p.balance) || 0;
   const marketCap = p.marketCap != null ? Number(p.marketCap) : (p.market_cap != null ? Number(p.market_cap) : 0);
@@ -88,8 +86,6 @@ function normalizeProject(p) {
   return Object.assign({}, p, {
     devId,
     tokenId,
-    tokenImage,
-    devImage,
     tokenMint,
     balance,
     marketCap,
@@ -178,7 +174,6 @@ function devAgentFor(project) {
     num: devId.replace(/^DEV-/, ""),
     name: codename + " BRAIN",
     seed: (codename.charCodeAt(0) || 1) + parseInt(devId.replace(/\D/g, "") || "1", 10),
-    imageUrl: p.devImage || null,
   };
 }
 

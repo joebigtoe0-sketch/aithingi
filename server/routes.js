@@ -16,8 +16,6 @@ import {
   hasDatabase,
 } from "./db.js";
 import { isAlchemyConfigured } from "./metrics.js";
-import { publicUrl } from "./upload.js";
-import { pairSpawnUpload, agentSpawnUpload } from "./spawn-upload.js";
 import { generateCentralMessage, generateEntityMessage, isAiConfigured } from "./ai.js";
 
 const ADMIN_TOKEN_KEY = "admin_token";
@@ -140,24 +138,15 @@ export function createApiRouter() {
     }
   });
 
-  api.post("/projects", requireAdmin, (req, res, next) => {
-    pairSpawnUpload(req, res, (err) => {
-      if (err) return res.status(400).json({ error: err.message || "upload failed" });
-      next();
-    });
-  }, async (req, res) => {
+  api.post("/projects", requireAdmin, async (req, res) => {
     try {
       const { codename, ticker, budget, thesis, wallet, tokenMint } = req.body || {};
       if (!codename?.trim()) return res.status(400).json({ error: "codename required" });
       if (!thesis?.trim()) return res.status(400).json({ error: "brief required" });
       if (!wallet?.trim()) return res.status(400).json({ error: "dev wallet address required" });
       if (!tokenMint?.trim()) return res.status(400).json({ error: "token contract address required" });
-      const tokenFile = req.files?.tokenImage?.[0];
-      const devFile = req.files?.devImage?.[0];
-      const tokenImage = tokenFile ? publicUrl("tokens", tokenFile.filename) : null;
-      const devImage = devFile ? publicUrl("devs", devFile.filename) : null;
       const project = await createDeveloperProject({
-        codename, ticker, budget, thesis, tokenImage, devImage, wallet, tokenMint,
+        codename, ticker, budget, thesis, wallet, tokenMint,
       });
       const nextDev = await getNextPairNumber();
       res.status(201).json({ project, nextDev });
@@ -167,17 +156,11 @@ export function createApiRouter() {
     }
   });
 
-  api.post("/projects/:key/agents", requireAdmin, (req, res, next) => {
-    agentSpawnUpload(req, res, (err) => {
-      if (err) return res.status(400).json({ error: err.message || "upload failed" });
-      next();
-    });
-  }, async (req, res) => {
+  api.post("/projects/:key/agents", requireAdmin, async (req, res) => {
     try {
       const { type } = req.body || {};
       if (!type?.trim()) return res.status(400).json({ error: "agent type required" });
-      const imageUrl = req.file ? publicUrl("agents", req.file.filename) : null;
-      const { agent, project } = await addProjectAgent(req.params.key, { type, imageUrl });
+      const { agent, project } = await addProjectAgent(req.params.key, { type });
       res.status(201).json({ agent, project });
     } catch (err) {
       console.error(err);

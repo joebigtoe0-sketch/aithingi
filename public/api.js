@@ -81,12 +81,15 @@
       });
     },
 
-    async spawnProject(formData) {
-      return requestMultipart("/projects", formData);
+    async spawnProject(body) {
+      return request("/projects", { method: "POST", body: JSON.stringify(body) });
     },
 
-    async hireAgent(projectKey, formData) {
-      return requestMultipart("/projects/" + encodeURIComponent(projectKey) + "/agents", formData);
+    async hireAgent(projectKey, body) {
+      return request("/projects/" + encodeURIComponent(projectKey) + "/agents", {
+        method: "POST",
+        body: JSON.stringify(body),
+      });
     },
 
     async inject(entry) {

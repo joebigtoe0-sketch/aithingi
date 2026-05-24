@@ -200,7 +200,7 @@ function CastPage({ projectsTick }) {
       <div style={{marginTop:34}}>
         <div className="hdg"><span>// the parent — #000</span></div>
         <div style={{display:"grid", gridTemplateColumns:"repeat(4, 1fr)", gap:16, maxWidth:760}}>
-          <Avatar agent={NN.CENTRAL} size={150} label={true} imageSrc="/centralbrain.png" />
+          <Avatar agent={NN.CENTRAL} size={150} label={true} />
           <Avatar agent={NN.DISPATCH} size={150} label={true} />
         </div>
       </div>
@@ -228,14 +228,14 @@ function CastPage({ projectsTick }) {
                onClick={(e)=>{e.preventDefault();window.navigate("/node/" + p.devId);}}
                style={{textDecoration:"none"}}>
               <div style={{display:"flex", flexDirection:"column", alignItems:"center", gap:8}}>
-                <Avatar agent={NN.devAgentFor(p)} size={150} label={true} />
+                <Avatar agent={NN.devAgentFor(p)} size={150} label={true} project={p} />
                 <div className="muted small up" style={{letterSpacing:"0.16em"}}>{p.devId} · brain</div>
               </div>
             </a>
             {(p.agents || []).map(a => (
               <a key={a.id} href={"#/node/" + a.id}
                  onClick={(e)=>{e.preventDefault();window.navigate("/node/" + a.id);}}>
-                  <Avatar agent={a} size={150} label={true} imageSrc={a.imageUrl} />
+                  <Avatar agent={a} size={150} label={true} project={p} />
               </a>
             ))}
           </div>
@@ -304,18 +304,6 @@ function MetricHero({ tag, value, sub, spark, color }) {
   );
 }
 
-function ImageUploadField({ label, file, onFile, previewUrl }) {
-  const url = previewUrl || (file ? URL.createObjectURL(file) : null);
-  return (
-    <div style={{ marginTop: 10 }}>
-      <label className="field-label">{label}</label>
-      <input type="file" accept="image/jpeg,image/png,image/webp,image/gif"
-        onChange={(e) => onFile(e.target.files?.[0] || null)} />
-      {url && <img src={url} alt="" className="upload-preview" />}
-    </div>
-  );
-}
-
 function NodeDetailPage({ id, entries, now, projects, store }) {
   if (id === "CENTRAL") return <CentralNodeDetail entries={entries} />;
   if (id === "DISPATCH") return <DispatchNodeDetail entries={entries} />;
@@ -344,7 +332,7 @@ function CentralNodeDetail({ entries }) {
     <div className="wrap" style={{padding:"30px 32px 60px"}}>
       <BackLink />
       <div className="node-hero">
-        <Avatar agent={NN.CENTRAL} size={160} frame={true} label={false} imageSrc="/centralbrain.png" />
+        <Avatar agent={NN.CENTRAL} size={160} frame={true} label={false} />
         <div>
           <div className="sub">// node-00 · figure #000</div>
           <div className="name">Central Brain</div>
@@ -506,7 +494,6 @@ function EntityAdminPanel({ store, src, title, hint, headerVisual }) {
 function AdminHirePanel({ project, projects, store }) {
   const isAdmin = useIsAdmin();
   const [hiring, setHiring] = _us(null);
-  const [img, setImg] = _us(null);
   const [err, setErr] = _us("");
   const [ok, setOk] = _us("");
   if (!isAdmin || !projects?.hireAgent) return null;
@@ -514,14 +501,10 @@ function AdminHirePanel({ project, projects, store }) {
   const p = NN.normalizeProject(project);
 
   async function hire(type) {
-    if (!img) { setErr("upload an image for this contractor"); return; }
     setHiring(type);
     setErr("");
     try {
-      const fd = new FormData();
-      fd.append("type", type);
-      fd.append("image", img);
-      const agent = await projects.hireAgent(key, fd);
+      const agent = await projects.hireAgent(key, { type });
       const label = (window.AVATAR_TYPES?.[type]?.label || type.toUpperCase());
       if (store && p.devId) {
         store.inject({
@@ -532,7 +515,6 @@ function AdminHirePanel({ project, projects, store }) {
         });
       }
       setOk(`${label} hired · logged.`);
-      setImg(null);
       setTimeout(() => setOk(""), 2400);
     } catch (ex) {
       setErr(ex.message || "hire failed");
@@ -545,11 +527,10 @@ function AdminHirePanel({ project, projects, store }) {
     <div className="card" style={{ marginTop: 18, borderColor: "rgba(142,255,193,0.25)" }}>
       <span className="card-tag">// operator · hire contractors</span>
       <p className="muted small" style={{ lineHeight: 1.6, marginBottom: 12 }}>
-        logged in as admin. pick a role, upload its figure image, then hire. appears on map + cast.
+        logged in as admin. pick a role to hire — figure generates automatically. appears on map + cast.
       </p>
       {err && <div className="err small" style={{ marginBottom: 10 }}>{err}</div>}
       {ok && <div className="cent small" style={{ marginBottom: 10 }}>{ok}</div>}
-      <ImageUploadField label="contractor image" file={img} onFile={setImg} />
       <div className="hire-grid">
         {NN.CONTRACTOR_TYPES.map((type) => {
           const t = window.AVATAR_TYPES[type];
@@ -649,7 +630,7 @@ function TokenNodeDetail({ project, entries, projects, store }) {
                 {(p.agents || []).map(a => (
                   <a key={a.id} href={"#/node/" + a.id}
                      onClick={(e)=>{e.preventDefault();window.navigate("/node/" + a.id);}}>
-                    <Avatar agent={a} size={120} label={true} imageSrc={a.imageUrl} />
+                    <Avatar agent={a} size={120} label={true} project={p} />
                   </a>
                 ))}
               </div>
@@ -698,7 +679,7 @@ function DevNodeDetail({ project, entries, projects, store }) {
     <div className="wrap-wide" style={{padding:"30px 32px 60px"}}>
       <BackLink />
       <div className="node-hero">
-        <Avatar agent={dev} size={130} frame={true} label={false} />
+        <Avatar agent={dev} size={130} frame={true} label={false} project={p} />
         <div>
           <div className="sub">// developer brain · {p.devId}</div>
           <div className="name">{p.codename}</div>
@@ -732,7 +713,7 @@ function DevNodeDetail({ project, entries, projects, store }) {
             src={p.devId}
             title={p.devId}
             hint={`draft and inject THOUGHT lines as ${p.devId} — operator voice for this developer brain.`}
-            headerVisual={<Avatar agent={dev} size={56} frame={true} label={false} imageSrc={p.devImage} />}
+            headerVisual={<Avatar agent={dev} size={56} frame={true} label={false} project={p} />}
           />
         </div>
         <div>
@@ -766,7 +747,7 @@ function AgentNodeDetail({ agent, entries, store }) {
     <div className="wrap" style={{padding:"30px 32px 60px"}}>
       <BackLink />
       <div className="node-hero">
-        <Avatar agent={agent} size={160} frame={true} label={false} imageSrc={agent.imageUrl} />
+        <Avatar agent={agent} size={160} frame={true} label={false} project={parent} />
         <div>
           <div className="sub">// {t.label} · figure #{agent.num}</div>
           <div className="name">{agent.name}</div>
@@ -797,7 +778,7 @@ function AgentNodeDetail({ agent, entries, store }) {
             src={agent.id}
             title={agent.name}
             hint={`draft and inject THOUGHT lines as ${agent.id} — in-character for this ${t.label} contractor.`}
-            headerVisual={<Avatar agent={agent} size={56} frame={true} label={false} imageSrc={agent.imageUrl} />}
+            headerVisual={<Avatar agent={agent} size={56} frame={true} label={false} project={parent} />}
           />
         </div>
 
@@ -975,8 +956,6 @@ function AdminConsole({ store, projects }) {
   const [spawnBrief, setSpawnBrief] = _us("");
   const [spawnWallet, setSpawnWallet] = _us("");
   const [spawnMint, setSpawnMint] = _us("");
-  const [spawnTokenImg, setSpawnTokenImg] = _us(null);
-  const [spawnDevImg, setSpawnDevImg] = _us(null);
   const [spawnBusy, setSpawnBusy] = _us(false);
 
   void projects.tick;
@@ -999,11 +978,6 @@ function AdminConsole({ store, projects }) {
   async function spawn(e) {
     e.preventDefault();
     if (!spawnCode || !spawnBrief || spawnBusy) return;
-    if (!spawnTokenImg || !spawnDevImg) {
-      setFlash("UPLOAD TOKEN + DEV IMAGES.");
-      setTimeout(() => setFlash(null), 2800);
-      return;
-    }
     if (!spawnWallet.trim() || !spawnMint.trim()) {
       setFlash("WALLET + TOKEN MINT REQUIRED.");
       setTimeout(() => setFlash(null), 2800);
@@ -1012,16 +986,14 @@ function AdminConsole({ store, projects }) {
     setSpawnBusy(true);
     const code = spawnCode.toUpperCase();
     try {
-      const fd = new FormData();
-      fd.append("codename", code);
-      fd.append("ticker", spawnTick);
-      fd.append("budget", spawnBudget);
-      fd.append("thesis", spawnBrief);
-      fd.append("wallet", spawnWallet.trim());
-      fd.append("tokenMint", spawnMint.trim());
-      fd.append("tokenImage", spawnTokenImg);
-      fd.append("devImage", spawnDevImg);
-      const project = await projects.spawn(fd);
+      const project = await projects.spawn({
+        codename: code,
+        ticker: spawnTick,
+        budget: spawnBudget,
+        thesis: spawnBrief,
+        wallet: spawnWallet.trim(),
+        tokenMint: spawnMint.trim(),
+      });
       const wallet = project.wallet;
       store.inject({ src:"CENTRAL", tag:"THOUGHT", msg: `spawning ${project.tokenId} + ${project.devId} for "${code}". budget ${spawnBudget} SOL.` });
       setTimeout(() => store.inject({ src:"DISPATCH", tag:"ACK", msg: `wallet ${wallet} funded with ${spawnBudget} SOL` }), 400);
@@ -1030,7 +1002,6 @@ function AdminConsole({ store, projects }) {
       setFlash(`${project.tokenId} + ${project.devId} SPAWNED.`);
       setSpawnCode(""); setSpawnTick("$"); setSpawnBudget("2.0"); setSpawnBrief("");
       setSpawnWallet(""); setSpawnMint("");
-      setSpawnTokenImg(null); setSpawnDevImg(null);
       setTimeout(() => setFlash(null), 2500);
     } catch (ex) {
       setFlash(ex.message || "SPAWN FAILED.");
@@ -1065,7 +1036,7 @@ function AdminConsole({ store, projects }) {
           <form onSubmit={generateWithAi} className="card" style={{marginBottom:18}}>
             <span className="card-tag">// AI brief · central brain</span>
             <div style={{display:"flex", alignItems:"center", gap:14, marginBottom:14}}>
-              <Avatar agent={NN.CENTRAL} size={56} frame={true} label={false} imageSrc="/centralbrain.png" />
+              <Avatar agent={NN.CENTRAL} size={56} frame={true} label={false} />
               <div className="muted small" style={{lineHeight:1.6, fontSize:11}}>
                 describe what CENTRAL should consider. the model reads context + your brief and drafts the log line below.
               </div>
@@ -1147,7 +1118,7 @@ function AdminConsole({ store, projects }) {
           <form onSubmit={spawn} className="card">
             <span className="card-tag">// spawn token + developer</span>
             <p className="muted small" style={{ marginBottom: 14, lineHeight: 1.6 }}>
-              CENTRAL → token → dev on the map. upload both images.
+              CENTRAL → token → dev on the map. figures generate from wallet + mint seeds.
             </p>
             <div className="row">
               <div>
@@ -1175,15 +1146,11 @@ function AdminConsole({ store, projects }) {
                   placeholder="mint address…" style={{ fontSize: 11 }} />
               </div>
             </div>
-            <div className="row" style={{ marginTop: 8 }}>
-              <ImageUploadField label="token image" file={spawnTokenImg} onFile={setSpawnTokenImg} />
-              <ImageUploadField label="developer brain image" file={spawnDevImg} onFile={setSpawnDevImg} />
-            </div>
             <label className="field-label" style={{marginTop:14}}>initial brief</label>
             <textarea value={spawnBrief} onChange={e => setSpawnBrief(e.target.value)}
               placeholder="one paragraph. the brief is what the developer brain reads on boot." />
             <button type="submit" className="btn btn-block swap" style={{marginTop:18, borderColor:"var(--amber)", color:"var(--amber)"}}
-              disabled={!spawnCode || !spawnBrief || !spawnWallet.trim() || !spawnMint.trim() || !spawnTokenImg || !spawnDevImg || spawnBusy}>
+              disabled={!spawnCode || !spawnBrief || !spawnWallet.trim() || !spawnMint.trim() || spawnBusy}>
               [ {spawnBusy ? "SPAWNING…" : "SPAWN " + nextPairLabel} ]
             </button>
             <div className="muted tiny" style={{marginTop:10, letterSpacing:"0.16em", textTransform:"uppercase"}}>

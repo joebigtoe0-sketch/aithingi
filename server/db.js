@@ -166,7 +166,7 @@ export async function findProjectByKey(key) {
   ) || null;
 }
 
-function buildAgent(project, type, imageUrl) {
+function buildAgent(project, type) {
   const t = String(type || "").toLowerCase();
   if (!CONTRACTOR_TYPES.includes(t)) throw new Error(`invalid agent type: ${type}`);
   const n = (project.agents || []).length + 1;
@@ -177,8 +177,7 @@ function buildAgent(project, type, imageUrl) {
     type: t,
     num,
     name: `${t.toUpperCase()} ${num}`,
-    seed: (project.codename?.charCodeAt(0) || 1) + n * 11,
-    imageUrl: imageUrl || null,
+    seed: id,
   };
 }
 
@@ -218,7 +217,7 @@ export async function createDeveloperProject(opts) {
 }
 
 export async function createTokenPair({
-  codename, ticker, budget, thesis, tokenImage, devImage, wallet, tokenMint,
+  codename, ticker, budget, thesis, wallet, tokenMint,
 }) {
   const num = await getNextPairNumber();
   const pad = String(num).padStart(3, "0");
@@ -251,8 +250,6 @@ export async function createTokenPair({
     thesis: String(thesis || "").trim(),
     agents: [],
     pumpfun: `https://pump.fun/coin/${mint}`,
-    tokenImage: tokenImage || null,
-    devImage: devImage || null,
   });
   const inserted = await insertProject(project);
   return syncProjectMetrics(inserted, { force: true });
@@ -314,10 +311,10 @@ export async function updateProjectAgents(dbId, agents) {
   return findProjectByKey(dbId);
 }
 
-export async function addProjectAgent(projectKey, { type, imageUrl }) {
+export async function addProjectAgent(projectKey, { type }) {
   const project = await findProjectByKey(projectKey);
   if (!project) throw new Error("project not found");
-  const agent = buildAgent(project, type, imageUrl);
+  const agent = buildAgent(project, type);
   const agents = [...(project.agents || []), agent];
   await updateProjectAgents(project.id, agents);
   const updated = await findProjectByKey(projectKey);
