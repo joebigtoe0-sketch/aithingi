@@ -84,25 +84,18 @@
   function buildFigure(t = {}) {
     const {
       body = "egg", color = "sage", eyes: eyeKind = "two", mouth: mouthKind = "smile",
-      limbs: limbKind = "none", tell = "none", number = null, label = null,
+      limbs: limbKind = "none", tell = "none",
     } = t;
     const fill = COLORS[color] || COLORS.sage;
     const fy = FACE_Y[body] ?? 88;
     const path = BODIES[body] || BODIES.egg;
-    const plate = number != null
-      ? `<rect x="58" y="124" width="36" height="13" rx="2" fill="#e9dec2" opacity="0.6"/><text x="76" y="134" text-anchor="middle" fill="${LABEL}" font-family="monospace" font-size="9">#${String(number).padStart(3, "0")}</text>`
-      : "";
-    const cap = label
-      ? `<text x="76" y="172" text-anchor="middle" fill="#a99a82" font-family="monospace" font-size="10" letter-spacing="1">${label}</text>`
-      : "";
-    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 152 190" preserveAspectRatio="xMidYMid meet" role="img"><title>${label || "agent figure"}${number != null ? " #" + number : ""}</title>` +
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 152 156" preserveAspectRatio="xMidYMid meet" role="img"><title>agent figure</title>` +
       `<ellipse cx="76" cy="150" rx="40" ry="7" fill="#000" opacity="0.22"/>` +
       limbs(limbKind, fill) +
       `<path d="${path}" fill="${fill}" stroke="${INK}" stroke-width="5" stroke-linejoin="round"/>` +
       TELLS[tell] +
       eyes(eyeKind, 76, fy) +
       mouth(mouthKind, 76, fy + 26) +
-      plate + cap +
       `</svg>`;
   }
 
@@ -147,7 +140,7 @@
     const base = ROLE_PRESETS[role] || ROLE_PRESETS.developer;
     const h = hash(String(seed ?? `${role}-${number}`));
     const eyeKind = pick([base.eyes, base.eyes, "two", "sleepy"], h);
-    return buildFigure({ ...base, eyes: eyeKind, number, label: role.toUpperCase() });
+    return buildFigure({ ...base, eyes: eyeKind });
   }
 
   /** Fixed #000 central brain — authored once, not seed-randomized. */
@@ -159,8 +152,6 @@
       mouth: "smile",
       limbs: "none",
       tell: "none",
-      number: 0,
-      label: "CENTRAL",
     });
   }
 

@@ -420,14 +420,14 @@ pre.ascii .h-sub  { color: var(--azure); }
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 6%;
+  padding: 2%;
   box-sizing: border-box;
 }
 .mitosis-figure svg,
 .figure-inner .mitosis-figure svg {
   display: block;
-  width: 100%;
-  height: 100%;
+  width: 108%;
+  height: 108%;
 }
 .figure-num {
   position: absolute;
@@ -491,11 +491,12 @@ pre.ascii .h-sub  { color: var(--azure); }
   display: flex;
   align-items: center;
   justify-content: center;
+  padding: 0;
 }
 .map-stage .mitosis-figure svg {
   display: block;
-  width: 100%;
-  height: 100%;
+  width: 108%;
+  height: 108%;
 }
 
 /* ============================================================

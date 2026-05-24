@@ -52,7 +52,7 @@ function buildSvgForAgent(agent, project) {
   const seed = figureSeed(agent, project);
   const role = MITOSIS_ROLE[agent.type];
   if (role) return M.buildRoleFigure(role, num, seed);
-  return M.buildFigureFromSeed(seed, { number: num, label: (agent.name || agent.type || "").split(" ")[0].toUpperCase() });
+  return M.buildFigureFromSeed(seed);
 }
 
 function MitosisSvg({ svg, width, height, fill }) {
