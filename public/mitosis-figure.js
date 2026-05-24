@@ -81,6 +81,9 @@
     none: "",
   };
 
+  const FIGURE_VIEW = "0 0 152 152";
+  const FIGURE_LIFT = -26;
+
   function buildFigure(t = {}) {
     const {
       body = "egg", color = "sage", eyes: eyeKind = "two", mouth: mouthKind = "smile",
@@ -89,14 +92,15 @@
     const fill = COLORS[color] || COLORS.sage;
     const fy = FACE_Y[body] ?? 88;
     const path = BODIES[body] || BODIES.egg;
-    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 152 152" preserveAspectRatio="xMidYMid meet" role="img"><title>agent figure</title>` +
+    const art =
       `<ellipse cx="76" cy="150" rx="40" ry="7" fill="#000" opacity="0.22"/>` +
       limbs(limbKind, fill) +
       `<path d="${path}" fill="${fill}" stroke="${INK}" stroke-width="5" stroke-linejoin="round"/>` +
       TELLS[tell] +
       eyes(eyeKind, 76, fy) +
-      mouth(mouthKind, 76, fy + 26) +
-      `</svg>`;
+      mouth(mouthKind, 76, fy + 26);
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${FIGURE_VIEW}" preserveAspectRatio="xMidYMid meet" role="img"><title>agent figure</title>` +
+      `<g transform="translate(0,${FIGURE_LIFT})">${art}</g></svg>`;
   }
 
   function hash(str) {
