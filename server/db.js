@@ -14,15 +14,48 @@ export function hasDatabase() {
   return Boolean(process.env.DATABASE_URL?.trim());
 }
 
+function createPool() {
+  const p = new pg.Pool({
+    connectionString: process.env.DATABASE_URL,
+    ssl: process.env.DATABASE_SSL === "false" ? false : { rejectUnauthorized: false },
+    max: 8,
+    idleTimeoutMillis: 20_000,
+    connectionTimeoutMillis: 10_000,
+    keepAlive: true,
+    keepAliveInitialDelayMillis: 10_000,
+  });
+  // Idle clients dropped by Railway's proxy must not crash the process.
+  p.on("error", (err) => {
+    console.error("[db] pool connection error:", err.message);
+  });
+  return p;
+}
+
 export function getPool() {
   if (!hasDatabase()) return null;
-  if (!pool) {
-    pool = new pg.Pool({
-      connectionString: process.env.DATABASE_URL,
-      ssl: process.env.DATABASE_SSL === "false" ? false : { rejectUnauthorized: false },
-    });
-  }
+  if (!pool) pool = createPool();
   return pool;
+}
+
+export async function closePool() {
+  if (!pool) return;
+  const p = pool;
+  pool = null;
+  await p.end();
+}
+
+const RETRYABLE = /connection terminated|ECONNRESET|ECONNREFUSED|ETIMEDOUT|socket hang up/i;
+
+export async function poolQuery(text, params) {
+  const p = getPool();
+  if (!p) throw new Error("database not configured");
+  try {
+    return await p.query(text, params);
+  } catch (err) {
+    if (!RETRYABLE.test(err.message || "")) throw err;
+    console.warn("[db] retrying query after:", err.message);
+    return p.query(text, params);
+  }
 }
 
 async function runSchema(client) {
@@ -199,12 +232,12 @@ export async function insertProject(project) {
     memoryStore.projects.sort((a, b) => a.id.localeCompare(b.id));
     return memoryStore.projects.find((x) => x.id === row.id);
   }
-  await p.query(
+  await poolQuery(
     `INSERT INTO projects (id, codename, ticker, status, launched, wallet, balance, market_cap, holders, thesis, subagents, pumpfun, token_id, dev_id, token_image, dev_image, token_mint, metrics_updated_at)
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)`,
     projectToDbRow(row)
   );
-  const { rows } = await p.query("SELECT * FROM projects WHERE id = $1", [row.id]);
+  const { rows } = await poolQuery("SELECT * FROM projects WHERE id = $1", [row.id]);
   return rows.length ? rowToProject(rows[0]) : rowToProject({ ...row, subagents: row.agents });
 }
 
@@ -456,6 +489,6 @@ export async function deleteLogEntry(id) {
 export async function getProjects() {
   const p = getPool();
   if (!p) return memoryStore.projects.map(normalizeProject);
-  const { rows } = await p.query("SELECT * FROM projects ORDER BY COALESCE(token_id, id) ASC");
+  const { rows } = await poolQuery("SELECT * FROM projects ORDER BY COALESCE(token_id, id) ASC");
   return rows.map(rowToProject);
 }

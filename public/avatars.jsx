@@ -1,6 +1,13 @@
 /* ============================================================
-   avatars.jsx — MITOSIS figure renderer
+   avatars.jsx — sprite sheet + token upload renderer
    ============================================================ */
+
+const GRID_COLS = 5;
+const GRID_CELLS = 25;
+const CELL_W = 200;
+const CELL_H = 190;
+const SHEET_SIZE = 1000;
+const CENTRAL_BRAIN_IMG = "/centralbrain.png";
 
 const AVATAR_TYPES = {
   central:   { label: "CENTRAL",   body: "#8a9b6e", shade: "#6f8761", accent: "#3a3228" },
@@ -16,18 +23,24 @@ const AVATAR_TYPES = {
 };
 window.AVATAR_TYPES = AVATAR_TYPES;
 
-const MITOSIS_ROLE = {
-  builder: "builder",
-  voice: "voice",
-  watcher: "watcher",
-  art: "artist",
-  shill: "scout",
-  comms: "messenger",
-  analytics: "analyst",
-  dev: "developer",
-  dispatch: "messenger",
-  central: null,
+const CONTRACTOR_CELL = {
+  builder: 13,
+  voice: 14,
+  watcher: 15,
+  art: 16,
+  shill: 17,
+  comms: 18,
+  analytics: 19,
 };
+
+function wrapCell(n) {
+  return ((n % GRID_CELLS) + GRID_CELLS) % GRID_CELLS;
+}
+
+function pairNumFromDevId(devId) {
+  const m = String(devId || "").match(/(\d+)/);
+  return m ? parseInt(m[1], 10) : 1;
+}
 
 function agentNumber(agent) {
   if (agent.num != null && agent.num !== "") {
@@ -38,43 +51,67 @@ function agentNumber(agent) {
   return fromId ? parseInt(fromId[1], 10) : 1;
 }
 
-function figureSeed(agent, project) {
-  if (agent.type === "dev" && project?.wallet) return project.wallet;
-  if (agent.type === "dev" && project?.devId) return project.devId;
-  return agent.id || String(agent.seed || agent.type || "agent");
+function gridCellIndex(agent, project) {
+  if (!agent) return 0;
+  if (agent.type === "dispatch") return 23;
+  if (agent.type === "dev") {
+    const n = project?.devId ? pairNumFromDevId(project.devId) : agentNumber(agent);
+    return wrapCell(n - 1);
+  }
+  if (CONTRACTOR_CELL[agent.type] != null) return CONTRACTOR_CELL[agent.type];
+  return wrapCell(agentNumber(agent) + 10);
 }
 
-function buildSvgForAgent(agent, project) {
-  const M = window.MITOSIS;
-  if (!M) return "";
-  if (agent.type === "central") return M.buildCentralFigure();
-  const num = agentNumber(agent);
-  const seed = figureSeed(agent, project);
-  const role = MITOSIS_ROLE[agent.type];
-  if (role) return M.buildRoleFigure(role, num, seed);
-  return M.buildFigureFromSeed(seed);
+function cellPosition(cellIndex) {
+  const col = cellIndex % GRID_COLS;
+  const row = Math.floor(cellIndex / GRID_COLS);
+  return { col, row };
 }
 
-function MitosisSvg({ svg, width, height, fill }) {
-  if (!svg) return null;
+function CentralFigure({ size, fill }) {
   const style = fill
     ? { width: "100%", height: "100%" }
-    : { width, height: height ?? Math.round(width * (190 / 152)) };
+    : { width: size, height: size };
+  return (
+    <img
+      src={CENTRAL_BRAIN_IMG}
+      alt=""
+      className="central-brain-img"
+      style={style}
+    />
+  );
+}
+
+function MonsterSprite({ cellIndex, size, fill }) {
+  const { col, row } = cellPosition(cellIndex);
+  const displaySize = size || 96;
+  const scale = displaySize / CELL_W;
+  const style = {
+    width: fill ? "100%" : displaySize,
+    height: fill ? "100%" : displaySize,
+    backgroundImage: "url(/gridimage.png)",
+    backgroundRepeat: "no-repeat",
+    backgroundSize: `${SHEET_SIZE * scale}px ${SHEET_SIZE * scale}px`,
+    backgroundPosition: `${-col * CELL_W * scale}px ${-row * CELL_H * scale}px`,
+  };
+
   return (
     <div
-      className="mitosis-figure"
+      className="monster-sprite"
       style={style}
-      dangerouslySetInnerHTML={{ __html: svg }}
+      role="img"
+      aria-label={"figure cell " + (cellIndex + 1)}
     />
   );
 }
 
 function Avatar({ agent, size = 96, frame = true, label = false, project = null }) {
   if (!agent) return null;
-  const svg = buildSvgForAgent(agent, project);
-  const inner = frame
-    ? <MitosisSvg svg={svg} fill />
-    : <MitosisSvg svg={svg} width={size} height={size} />;
+  const inner = agent.type === "central"
+    ? (frame ? <CentralFigure fill size={size} /> : <CentralFigure size={size} />)
+    : frame
+      ? <MonsterSprite cellIndex={gridCellIndex(agent, project)} fill size={size} />
+      : <MonsterSprite cellIndex={gridCellIndex(agent, project)} size={size} />;
   const t = AVATAR_TYPES[agent.type] || AVATAR_TYPES.builder;
   const num = agent.type === "central" ? "000" : String(agentNumber(agent)).padStart(3, "0");
   return (
@@ -89,7 +126,7 @@ function FigureFrame({ children, size, frame, type, num, label, tint }) {
   const bg = tint || t.body;
   if (!frame) {
     return (
-      <div className="mitosis-figure" style={{ width: size, height: size }}>
+      <div className="monster-sprite-wrap" style={{ width: size, height: size }}>
         {children}
       </div>
     );
@@ -143,4 +180,4 @@ function TokenGlyph({ project, size = 84, frame = true }) {
 
 window.Avatar = Avatar;
 window.TokenGlyph = TokenGlyph;
-window.buildSvgForAgent = buildSvgForAgent;
+window.gridCellIndex = gridCellIndex;

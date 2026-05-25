@@ -409,33 +409,35 @@ pre.ascii .h-sub  { color: var(--azure); }
   background-image: radial-gradient(circle at 50% 35%, rgba(255,255,255,0.06), transparent 60%);
   pointer-events: none;
 }
-.figure-inner img {
+.figure-inner img,
+.central-brain-img,
+.figure-inner .central-brain-img {
   width: 100%;
   height: 100%;
   object-fit: contain;
   display: block;
   padding: 6%;
-}
-.figure-inner .mitosis-figure {
-  width: 100%;
-  height: 100%;
-  padding: 0;
   box-sizing: border-box;
 }
-.mitosis-figure {
+.monster-sprite-wrap .central-brain-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  padding: 4%;
+  box-sizing: border-box;
+}
+.figure-inner .monster-sprite,
+.monster-sprite-wrap .monster-sprite {
+  display: block;
+  margin: 0 auto;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
+.monster-sprite-wrap {
   display: flex;
   align-items: center;
   justify-content: center;
   overflow: hidden;
-  box-sizing: border-box;
-}
-.mitosis-figure svg {
-  display: block;
-  width: 100%;
-  height: 100%;
-  flex: none;
-  transform: scale(1.08);
-  transform-origin: center center;
 }
 .figure-num {
   position: absolute;

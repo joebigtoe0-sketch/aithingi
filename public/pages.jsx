@@ -539,7 +539,7 @@ function AdminHirePanel({ project, projects, store }) {
     <div className="card" style={{ marginTop: 18, borderColor: "rgba(142,255,193,0.25)" }}>
       <span className="card-tag">// operator · hire contractors</span>
       <p className="muted small" style={{ lineHeight: 1.6, marginBottom: 12 }}>
-        logged in as admin. pick a role to hire — figure generates automatically. appears on map + cast.
+        logged in as admin. pick a role to hire — appears on map + cast.
       </p>
       {err && <div className="err small" style={{ marginBottom: 10 }}>{err}</div>}
       {ok && <div className="cent small" style={{ marginBottom: 10 }}>{ok}</div>}
@@ -1151,7 +1151,7 @@ function AdminConsole({ store, projects }) {
           <form onSubmit={spawn} className="card">
             <span className="card-tag">// spawn token + developer</span>
             <p className="muted small" style={{ marginBottom: 14, lineHeight: 1.6 }}>
-              CENTRAL → token → dev on the map. upload token image; agent figures generate automatically.
+              CENTRAL → token → dev on the map. upload token image; dev + agent figures come from the monster roster grid.
             </p>
             <div className="row">
               <div>

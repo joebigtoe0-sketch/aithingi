@@ -3,7 +3,7 @@ import express from "express";
 import cors from "cors";
 import path from "path";
 import { fileURLToPath } from "url";
-import { initDb } from "./db.js";
+import { initDb, closePool } from "./db.js";
 import { createApiRouter } from "./routes.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -33,9 +33,18 @@ app.get("*", (req, res, next) => {
 
 async function main() {
   const db = await initDb();
-  app.listen(PORT, "0.0.0.0", () => {
+  const server = app.listen(PORT, "0.0.0.0", () => {
     console.log(`[server] listening on 0.0.0.0:${PORT}  db=${db.mode}  ai=${!!process.env.ANTHROPIC_API_KEY}`);
   });
+
+  const shutdown = async (signal) => {
+    console.log(`[server] ${signal} — shutting down`);
+    server.close();
+    await closePool().catch(() => {});
+    process.exit(0);
+  };
+  process.on("SIGTERM", () => shutdown("SIGTERM"));
+  process.on("SIGINT", () => shutdown("SIGINT"));
 }
 
 main().catch((err) => {
