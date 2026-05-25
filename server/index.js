@@ -5,6 +5,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { initDb, closePool } from "./db.js";
 import { createApiRouter } from "./routes.js";
+import { startDevAutopilot, stopDevAutopilot } from "./dev-autopilot.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, "..");
@@ -35,10 +36,12 @@ async function main() {
   const db = await initDb();
   const server = app.listen(PORT, "0.0.0.0", () => {
     console.log(`[server] listening on 0.0.0.0:${PORT}  db=${db.mode}  ai=${!!process.env.ANTHROPIC_API_KEY}`);
+    startDevAutopilot();
   });
 
   const shutdown = async (signal) => {
     console.log(`[server] ${signal} — shutting down`);
+    stopDevAutopilot();
     server.close();
     await closePool().catch(() => {});
     process.exit(0);

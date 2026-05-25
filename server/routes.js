@@ -21,6 +21,7 @@ import { isAlchemyConfigured } from "./metrics.js";
 import { publicUrl } from "./upload.js";
 import { tokenSpawnUpload } from "./spawn-upload.js";
 import { generateCentralMessage, generateEntityMessage, isAiConfigured } from "./ai.js";
+import { isDevAutopilotEnabled } from "./dev-autopilot.js";
 
 const ADMIN_TOKEN_KEY = "admin_token";
 
@@ -52,6 +53,7 @@ export function createApiRouter() {
       database: hasDatabase() ? "postgres" : "memory",
       ai: isAiConfigured(),
       metrics: isAlchemyConfigured(),
+      devAutopilot: isDevAutopilotEnabled(),
     });
   });
 
@@ -62,6 +64,7 @@ export function createApiRouter() {
         aiEnabled: isAiConfigured(),
         database: hasDatabase() ? "postgres" : "memory",
         metricsEnabled: isAlchemyConfigured(),
+        devAutopilotEnabled: isDevAutopilotEnabled(),
         platformCa,
       });
     } catch (err) {
