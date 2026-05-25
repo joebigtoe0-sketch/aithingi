@@ -304,12 +304,12 @@ function MetricHero({ tag, value, sub, spark, color }) {
   );
 }
 
-function ImageUploadField({ label, file, onFile, previewUrl }) {
+function ImageUploadField({ label, file, onFile, previewUrl, inputKey = 0 }) {
   const url = previewUrl || (file ? URL.createObjectURL(file) : null);
   return (
     <div style={{ marginTop: 10 }}>
       <label className="field-label">{label}</label>
-      <input type="file" accept="image/jpeg,image/png,image/webp,image/gif"
+      <input key={inputKey} type="file" accept="image/jpeg,image/png,image/webp,image/gif"
         onChange={(e) => onFile(e.target.files?.[0] || null)} />
       {url && <img src={url} alt="" className="upload-preview" />}
     </div>
@@ -969,6 +969,7 @@ function AdminConsole({ store, projects }) {
   const [spawnWallet, setSpawnWallet] = _us("");
   const [spawnMint, setSpawnMint] = _us("");
   const [spawnTokenImg, setSpawnTokenImg] = _us(null);
+  const [spawnUploadKey, setSpawnUploadKey] = _us(0);
   const [spawnBusy, setSpawnBusy] = _us(false);
 
   void projects.tick;
@@ -994,6 +995,17 @@ function AdminConsole({ store, projects }) {
     if (!spawnTokenImg) {
       setFlash("UPLOAD TOKEN IMAGE.");
       setTimeout(() => setFlash(null), 2800);
+      return;
+    }
+    const API = window.NETWORK_API;
+    if (!API?.isOnline()) {
+      setFlash("BACKEND OFFLINE.");
+      setTimeout(() => setFlash(null), 2800);
+      return;
+    }
+    if (!sessionStorage.getItem(API.TOKEN_KEY)) {
+      setFlash("SESSION EXPIRED — RE-LOGIN.");
+      setTimeout(() => setFlash(null), 3200);
       return;
     }
     if (!spawnWallet.trim() || !spawnMint.trim()) {
@@ -1022,6 +1034,7 @@ function AdminConsole({ store, projects }) {
       setSpawnCode(""); setSpawnTick("$"); setSpawnBudget("2.0"); setSpawnBrief("");
       setSpawnWallet(""); setSpawnMint("");
       setSpawnTokenImg(null);
+      setSpawnUploadKey((k) => k + 1);
       setTimeout(() => setFlash(null), 2500);
     } catch (ex) {
       setFlash(ex.message || "SPAWN FAILED.");
@@ -1166,7 +1179,7 @@ function AdminConsole({ store, projects }) {
                   placeholder="mint address…" style={{ fontSize: 11 }} />
               </div>
             </div>
-            <ImageUploadField label="token image" file={spawnTokenImg} onFile={setSpawnTokenImg} />
+            <ImageUploadField label="token image" file={spawnTokenImg} onFile={setSpawnTokenImg} inputKey={spawnUploadKey} />
             <label className="field-label" style={{marginTop:14}}>initial brief</label>
             <textarea value={spawnBrief} onChange={e => setSpawnBrief(e.target.value)}
               placeholder="one paragraph. the brief is what the developer brain reads on boot." />

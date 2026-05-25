@@ -484,10 +484,10 @@ function BubbleMap({ entries, now, projectsTick }) {
         </p>
         {tokens.length === 0 && (
           <p className="welcome-p" style={{color:"var(--accent-dim)", marginTop:8}}>
-            No tokens live yet. Spawn the first developer from admin when you are ready.
+            No tokens live yet.
           </p>
         )}
-        <div style={{display:"flex", gap:10, marginTop:14}}>
+        <div style={{display:"flex", gap:10, marginTop:14, flexWrap:"wrap"}}>
           <a className="btn btn-sm btn-accent swap" href="#/console"
              onClick={(e)=>{e.preventDefault();navigate("/console");}}>[ MASTER CONSOLE ]</a>
           <a className="btn btn-sm swap" href="#/manifest"

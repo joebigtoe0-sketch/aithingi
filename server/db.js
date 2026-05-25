@@ -85,17 +85,17 @@ function rowToProject(r) {
     launched: r.launched ? Number(r.launched) : null,
     wallet: r.wallet,
     balance: Number(r.balance) || 0,
-    marketCap: r.market_cap != null ? Number(r.market_cap) : 0,
+    marketCap: r.market_cap != null ? Number(r.market_cap) : (r.marketCap != null ? Number(r.marketCap) : 0),
     holders: r.holders != null ? Number(r.holders) : 0,
     thesis: r.thesis || "",
-    agents: parseAgents(r.subagents),
+    agents: parseAgents(r.subagents ?? r.agents),
     pumpfun: r.pumpfun,
-    tokenId: r.token_id,
-    devId: r.dev_id,
-    tokenImage: r.token_image,
-    devImage: r.dev_image,
-    tokenMint: r.token_mint,
-    metricsUpdatedAt: r.metrics_updated_at ? Number(r.metrics_updated_at) : null,
+    tokenId: r.token_id || r.tokenId,
+    devId: r.dev_id || r.devId,
+    tokenImage: r.token_image || r.tokenImage,
+    devImage: r.dev_image || r.devImage,
+    tokenMint: r.token_mint || r.tokenMint,
+    metricsUpdatedAt: r.metrics_updated_at ? Number(r.metrics_updated_at) : (r.metricsUpdatedAt ?? null),
   });
 }
 
@@ -195,11 +195,7 @@ export async function insertProject(project) {
     if (memoryStore.projects.some((x) => x.tokenId === norm.tokenId || x.devId === norm.devId)) {
       throw new Error("project already exists");
     }
-    memoryStore.projects.push(rowToProject({
-      ...row,
-      market_cap: row.marketCap,
-      subagents: row.agents,
-    }));
+    memoryStore.projects.push(normalizeProject({ ...row, agents: row.agents || [] }));
     memoryStore.projects.sort((a, b) => a.id.localeCompare(b.id));
     return memoryStore.projects.find((x) => x.id === row.id);
   }
@@ -217,9 +213,10 @@ export async function createDeveloperProject(opts) {
 }
 
 export async function createTokenPair({
-  codename, ticker, budget, thesis, wallet, tokenMint, tokenImage,
+  codename, ticker, budget, thesis, wallet, tokenMint, tokenImage, pairNum,
 }) {
-  const num = await getNextPairNumber();
+  const num = pairNum != null ? Number(pairNum) : await getNextPairNumber();
+  if (!Number.isFinite(num) || num < 1) throw new Error("invalid pair number");
   const pad = String(num).padStart(3, "0");
   const tokenId = "TKN-" + pad;
   const devId = "DEV-" + pad;
@@ -253,7 +250,12 @@ export async function createTokenPair({
     tokenImage: tokenImage || null,
   });
   const inserted = await insertProject(project);
-  return syncProjectMetrics(inserted, { force: true });
+  try {
+    return await syncProjectMetrics(inserted, { force: true });
+  } catch (err) {
+    console.warn("[spawn] metrics sync skipped:", err.message);
+    return inserted;
+  }
 }
 
 export async function updateProjectMetrics(projectKey, patch) {

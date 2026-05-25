@@ -147,15 +147,22 @@ export function createApiRouter() {
     });
   }, async (req, res) => {
     try {
-      const { codename, ticker, budget, thesis, wallet, tokenMint } = req.body || {};
-      if (!codename?.trim()) return res.status(400).json({ error: "codename required" });
-      if (!thesis?.trim()) return res.status(400).json({ error: "brief required" });
-      if (!wallet?.trim()) return res.status(400).json({ error: "dev wallet address required" });
-      if (!tokenMint?.trim()) return res.status(400).json({ error: "token contract address required" });
+      const body = req.body || {};
+      const codename = String(body.codename || "").trim();
+      const ticker = String(body.ticker || "").trim();
+      const budget = String(body.budget || "").trim();
+      const thesis = String(body.thesis || "").trim();
+      const wallet = String(body.wallet || "").trim();
+      const tokenMint = String(body.tokenMint || body.token_mint || "").trim();
+      if (!codename) return res.status(400).json({ error: "codename required" });
+      if (!thesis) return res.status(400).json({ error: "brief required" });
+      if (!wallet) return res.status(400).json({ error: "dev wallet address required" });
+      if (!tokenMint) return res.status(400).json({ error: "token contract address required" });
       if (!req.file) return res.status(400).json({ error: "token image required" });
       const tokenImage = publicUrl("tokens", req.file.filename);
       const project = await createDeveloperProject({
         codename, ticker, budget, thesis, wallet, tokenMint, tokenImage,
+        pairNum: req.pairNum,
       });
       const nextDev = await getNextPairNumber();
       res.status(201).json({ project, nextDev });
