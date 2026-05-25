@@ -1,5 +1,5 @@
 /* ============================================================
-   NETWORK // observation deck
+   MITOSIS // observation deck
    palette: terminal-black + phosphor + vintage figure tones
    ============================================================ */
 :root {
@@ -166,10 +166,31 @@ button { font-family: inherit; font-size: inherit; }
   text-transform: uppercase;
 }
 .ftr-row {
-  display: flex; align-items: center; justify-content: space-between;
-  gap: 24px; flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 24px;
 }
 .ftr-status { display: flex; gap: 22px; flex-wrap: wrap; }
+.ftr-status:first-child { justify-self: start; }
+.ftr-status:last-child { justify-self: end; }
+.ftr-ca {
+  justify-self: center;
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--accent);
+  font: inherit;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+.ftr-ca:hover { color: var(--text); }
+.ftr-ca:focus-visible {
+  outline: 1px solid var(--accent-dim);
+  outline-offset: 4px;
+}
 
 /* ---------- buttons ---------- */
 .btn {

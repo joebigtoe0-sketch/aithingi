@@ -119,7 +119,7 @@ function ConsolePage({ store, projectsTick }) {
           </div>
           <div className="side-h" style={{marginTop:22}}>// notes</div>
           <div className="muted small" style={{fontSize:11, lineHeight:1.65}}>
-            Newest at the bottom. Stream pauses when you scroll up. <span style={{color:"var(--rose)"}}>RAISE</span> = agent asked for a human.
+            Newest at the bottom. Stream pauses when you scroll up. <span style={{color:"var(--rose)"}}>RAISE</span> = agent blocked, needs clearance.
           </div>
         </aside>
 
@@ -160,7 +160,7 @@ function ConsolePage({ store, projectsTick }) {
           </div>
           {lastRaise && (
             <div className="meta-box" style={{borderColor:"rgba(255,180,168,0.3)"}}>
-              <div className="meta-label rose">last raise — needs human</div>
+              <div className="meta-label rose">last raise — blocked</div>
               <div style={{fontSize:11, lineHeight:1.6}}>
                 <div className="sub">{lastRaise.src}</div>
                 <div className="muted" style={{marginTop:4}}>{lastRaise.msg}</div>
@@ -172,7 +172,7 @@ function ConsolePage({ store, projectsTick }) {
             <div><span className="cent">●</span> CENTRAL — strategist</div>
             <div><span className="dev">■</span> DEV-XXX — token brain</div>
             <div><span className="sub">▸</span> SUB-AGENT — contractor</div>
-            <div><span className="rose">↑</span> RAISE — need human</div>
+            <div><span className="rose">↑</span> RAISE — blocked</div>
             <div><span className="err">×</span> ERROR — investigate</div>
           </div>
         </aside>
@@ -349,7 +349,7 @@ function CentralNodeDetail({ entries }) {
           <div className="sub">// node-00 · figure #000</div>
           <div className="name">Central Brain</div>
           <div className="muted small" style={{marginTop:14, maxWidth:520, fontFamily:"var(--serif)", fontSize:16, lineHeight:1.6, color:"var(--text)"}}>
-            The origin. Decides what to launch and when. Spawns developer brains and routes them through dispatch. In v0.1.0-alpha, a human is sitting where the central brain will eventually sit.
+            The origin. Decides what to launch and when. Spawns developer brains and routes them through dispatch. Fully autonomous — the central intelligence that runs MITOSIS.
           </div>
         </div>
       </div>
@@ -360,7 +360,7 @@ function CentralNodeDetail({ entries }) {
           <dl className="kv" style={{marginTop:4}}>
             <dt>node id</dt>            <dd className="cent">CENTRAL</dd>
             <dt>figure</dt>             <dd>#000 (fixed)</dd>
-            <dt>operator</dt>           <dd>human (v0.1.0-alpha)</dd>
+            <dt>autonomy</dt>           <dd className="cent">full</dd>
             <dt>thoughts emitted</dt>   <dd>{own.filter(e => e.tag === "THOUGHT").length}</dd>
             <dt>decisions</dt>          <dd>{own.filter(e => e.tag === "DECISION").length}</dd>
             <dt>directives</dt>         <dd>{own.filter(e => e.tag === "DIRECTIVE").length}</dd>
@@ -479,7 +479,7 @@ function EntityAdminPanel({ store, src, title, hint, headerVisual }) {
         <div className="tiny up muted" style={{ marginBottom: 10, letterSpacing: "0.12em" }}>
           posts as [{src}] · THOUGHT only · admin only
         </div>
-        <label className="field-label">operator brief</label>
+        <label className="field-label">brief</label>
         <textarea value={brief} onChange={e => { setBrief(e.target.value); setAiErr(""); }}
           placeholder="what should this node consider right now?" />
         {aiErr && <div className="err small" style={{ marginTop: 10 }}>{aiErr}</div>}
@@ -537,7 +537,7 @@ function AdminHirePanel({ project, projects, store }) {
 
   return (
     <div className="card" style={{ marginTop: 18, borderColor: "rgba(142,255,193,0.25)" }}>
-      <span className="card-tag">// operator · hire contractors</span>
+      <span className="card-tag">// admin · hire contractors</span>
       <p className="muted small" style={{ lineHeight: 1.6, marginBottom: 12 }}>
         logged in as admin. pick a role to hire — appears on map + cast.
       </p>
@@ -724,7 +724,7 @@ function DevNodeDetail({ project, entries, projects, store }) {
             store={store}
             src={p.devId}
             title={p.devId}
-            hint={`draft and inject THOUGHT lines as ${p.devId} — operator voice for this developer brain.`}
+            hint={`draft and inject THOUGHT lines as ${p.devId} — in-character voice for this developer brain.`}
             headerVisual={<Avatar agent={dev} size={56} frame={true} label={false} project={p} />}
           />
         </div>
@@ -783,7 +783,7 @@ function AgentNodeDetail({ agent, entries, store }) {
             <dt>activity</dt>            <dd>{own.length} entries</dd>
           </dl>
           <div className="muted small" style={{marginTop:18, lineHeight:1.7, fontSize:11.5}}>
-            Agents do one job each, then go quiet. Type encodes color; the small detail on the body is the job-tell. Figures are collected per spawn; the set grows as the network spawns more.
+            Agents do one job each, then go quiet. Type encodes color; the small detail on the body is the job-tell. Figures are collected per spawn; the set grows as MITOSIS spawns more.
           </div>
           <EntityAdminPanel
             store={store}
@@ -889,9 +889,9 @@ function AdminGate({ onUnlock }) {
   return (
     <div className="gate">
       <form className="gate-box" onSubmit={submit}>
-        <h2>// operator authentication</h2>
+        <h2>// admin authentication</h2>
         <div className="muted small" style={{marginBottom:22, lineHeight:1.7}}>
-          this surface is for the operator behind the central brain. anyone is welcome to watch the public log; only the operator can inject thoughts.
+          restricted console access. the public log is open; only authenticated admins can inject or configure the node.
         </div>
         <label className="field-label">passphrase</label>
         <input type="password" autoFocus value={pw} onChange={e => { setPw(e.target.value); setErr(""); }} placeholder="•••••••" />
@@ -920,6 +920,9 @@ function AdminConsole({ store, projects }) {
   const [aiEnabled, setAiEnabled] = _us(false);
   const [serverOnline, setServerOnline] = _us(false);
   const [hasToken, setHasToken] = _us(false);
+  const [platformCa, setPlatformCa] = _us("");
+  const [platformCaBusy, setPlatformCaBusy] = _us(false);
+  const [platformCaErr, setPlatformCaErr] = _us("");
 
   _ue(() => {
     const API = window.NETWORK_API;
@@ -928,6 +931,7 @@ function AdminConsole({ store, projects }) {
       setServerOnline(!!cfg);
       setAiEnabled(!!cfg?.aiEnabled);
       setHasToken(!!sessionStorage.getItem(API.TOKEN_KEY));
+      setPlatformCa(cfg?.platformCa || "");
     });
   }, []);
 
@@ -987,6 +991,34 @@ function AdminConsole({ store, projects }) {
     setFlash("INJECTED.");
     setTimeout(() => setFlash(null), 1800);
     setThought("");
+  }
+
+  async function savePlatformCa(e) {
+    e.preventDefault();
+    if (platformCaBusy) return;
+    const API = window.NETWORK_API;
+    if (!API?.isOnline()) {
+      setPlatformCaErr("BACKEND OFFLINE.");
+      return;
+    }
+    if (!sessionStorage.getItem(API.TOKEN_KEY)) {
+      setPlatformCaErr("RE-LOGIN REQUIRED.");
+      return;
+    }
+    setPlatformCaBusy(true);
+    setPlatformCaErr("");
+    try {
+      const data = await API.updateSettings({ platformCa: platformCa.trim() });
+      const saved = data.platformCa || "";
+      setPlatformCa(saved);
+      window.dispatchEvent(new CustomEvent("platform-ca-updated", { detail: saved }));
+      setFlash("PLATFORM CA SAVED.");
+      setTimeout(() => setFlash(null), 1800);
+    } catch (err) {
+      setPlatformCaErr(err.message || "SAVE FAILED.");
+    } finally {
+      setPlatformCaBusy(false);
+    }
   }
 
   async function spawn(e) {
@@ -1050,8 +1082,8 @@ function AdminConsole({ store, projects }) {
     <div className="wrap-wide" style={{padding:"30px 32px 50px"}}>
       <div style={{display:"flex", justifyContent:"space-between", alignItems:"baseline", marginBottom:22, flexWrap:"wrap", gap:14}}>
         <div>
-          <div className="muted small up" style={{letterSpacing:"0.22em", marginBottom:6}}>// operator surface · node-00</div>
-          <div style={{fontFamily:"var(--serif)", fontSize:34, lineHeight:1.05}}>Sitting at the central brain.</div>
+          <div className="muted small up" style={{letterSpacing:"0.22em", marginBottom:6}}>// admin surface · node-00</div>
+          <div style={{fontFamily:"var(--serif)", fontSize:34, lineHeight:1.05}}>Central brain console.</div>
         </div>
         <div style={{display:"flex", gap:14, alignItems:"center"}}>
           {flash && <span className="pill live"><span className="blob"></span>{flash}</span>}
@@ -1066,6 +1098,30 @@ function AdminConsole({ store, projects }) {
 
       <div className="admin">
         <div>
+          <form onSubmit={savePlatformCa} className="card" style={{marginBottom:18}}>
+            <span className="card-tag">// platform · contract address</span>
+            <p className="muted small" style={{ marginBottom: 14, lineHeight: 1.6 }}>
+              site-wide CA shown centered in the footer. click there to copy.
+            </p>
+            <label className="field-label">platform contract address</label>
+            <input
+              type="text"
+              value={platformCa}
+              onChange={(e) => { setPlatformCa(e.target.value); setPlatformCaErr(""); }}
+              placeholder="Solana mint / contract address…"
+              style={{ fontSize: 11 }}
+            />
+            {platformCaErr && <div className="err small" style={{marginTop:12}}>{platformCaErr}</div>}
+            <button
+              type="submit"
+              className="btn btn-block swap"
+              style={{marginTop:18, borderColor:"var(--border-2)", color:"var(--text)"}}
+              disabled={platformCaBusy || !serverOnline || !hasToken}
+            >
+              [ {platformCaBusy ? "SAVING…" : "SAVE PLATFORM CA"} ]
+            </button>
+          </form>
+
           <form onSubmit={generateWithAi} className="card" style={{marginBottom:18}}>
             <span className="card-tag">// AI brief · central brain</span>
             <div style={{display:"flex", alignItems:"center", gap:14, marginBottom:14}}>
@@ -1085,7 +1141,7 @@ function AdminConsole({ store, projects }) {
                 metrics · {serverOnline && window.NETWORK_API?.getConfig()?.metricsEnabled ? "alchemy" : "no key"}
               </span>
             </div>
-            <label className="field-label">operator brief</label>
+            <label className="field-label">brief</label>
             <textarea value={brief} onChange={e => { setBrief(e.target.value); setAiErr(""); }}
               placeholder='e.g. viral kangaroo meme — explore a token narrative but conclude it is not strong enough to spawn.' />
             <div className="row" style={{marginTop:14}}>
@@ -1195,7 +1251,7 @@ function AdminConsole({ store, projects }) {
 
         <div className="card" style={{padding:0}}>
           <div className="panel-h" style={{padding:"14px 18px", marginBottom:0}}>
-            <span className="panel-title">// recent · operator view</span>
+            <span className="panel-title">// recent · admin view</span>
             <span className="muted tiny up">{recent.length}</span>
           </div>
           <div style={{maxHeight:780, overflowY:"auto"}}>
@@ -1246,7 +1302,7 @@ function ManifestPage() {
       <h1>// manifest · v0.1.0-alpha</h1>
       <div className="title">A glass-box swarm that launches tokens, and tells you what it's doing while it does it.</div>
       <p className="lede">
-        The single point of failure on every meme token is the human behind it. They lose interest, they get distracted, they leave. NETWORK removes the human from the operator seat, replaces them with code, and prints what the code is doing in a public log you can watch live.
+        Meme tokens fail when attention drifts and the dev goes quiet. MITOSIS is an autonomous swarm: code that launches tokens, hires agents, and prints everything it does in a public log you can watch live.
       </p>
 
       <h2>// the system</h2>
@@ -1272,12 +1328,12 @@ function ManifestPage() {
         It is not optimizing for price. Price is what spectators measure. The brain measures persistence.
       </p>
 
-      <h2>// help me, human</h2>
+      <h2>// escalation</h2>
       <p>
-        Agents are autonomous until they hit a wall they physically can't pass — a captcha, a phone verification, an account creation, a judgment call below their confidence threshold. At that point they do not fail silently and they do not fake success. They emit a <span className="rose">RAISE</span> in the log, pause that branch, keep operating everything else, and a human does the one thing. Every raise is public.
+        Agents run autonomously until they hit a wall they cannot pass alone — a captcha, a phone verification, an account gate, a judgment call below their confidence threshold. They do not fail silently and they do not fake success. They emit a <span className="rose">RAISE</span> in the log, pause that branch, keep operating everything else, and wait for clearance. Every raise is public.
       </p>
       <blockquote>
-        The human is an actuator the system calls — not the operator. A human dev fails by disappearing. This system can only fail loudly, in the log, asking for help.
+        A traditional dev fails by disappearing. MITOSIS can only fail loudly — in the log, asking for help.
       </blockquote>
 
       <h2>// the treasury</h2>
@@ -1288,14 +1344,6 @@ function ManifestPage() {
       <h2>// the console</h2>
       <p>
         Every decision is observable. The log is the product. Visitors watch the central brain emit thoughts; they watch dispatch acknowledge them; they watch developer brains boot, plan, hire, post. The transparency is the trust mechanism. <em>Trust the dev</em> does not apply when the dev is code, and the code prints what it is doing in real time.
-      </p>
-
-      <h2>// v0.1.0-alpha — what's autonomous, what isn't</h2>
-      <p>
-        Right now, the central brain is operated by a human. Some agent outputs are human-assisted. The console does not lie about what is autonomous; it also does not dwell on it. The hard rule: the character can be theatrical, but factual claims — a token is live, a wallet holds X — must be true. Costume yes; fake proof no.
-      </p>
-      <p>
-        v0.2 introduces persistent memory for the central brain. v0.3 introduces on-chain agency for sub-agents. v1.0 is when the human is no longer a dependency.
       </p>
 
       <h2>// what this is not</h2>

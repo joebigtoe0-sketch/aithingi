@@ -84,9 +84,11 @@ function normalizeProject(p) {
   devId = devId || "DEV-" + pad;
   tokenId = tokenId || "TKN-" + pad;
   const agents = p.agents || p.subagents || [];
+  const status = p.status === "booting" ? "live" : p.status;
   return Object.assign({}, p, {
     devId,
     tokenId,
+    status,
     tokenImage,
     tokenMint,
     balance,

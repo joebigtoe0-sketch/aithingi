@@ -225,7 +225,7 @@ function Header({ path, activeAgents, liveTokens }) {
         <div className="brand">
           <div className="brand-mark"><span className="dot"></span></div>
           <div>
-            <div>NETWORK</div>
+            <div>$MITOSIS</div>
             <div className="brand-sub">OBSERVATION DECK · NODE-00</div>
           </div>
         </div>
@@ -247,6 +247,40 @@ function Header({ path, activeAgents, liveTokens }) {
 
 function Footer({ now }) {
   const dep = N.deployTs();
+  const [platformCa, setPlatformCa] = useState("");
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    const API = window.NETWORK_API;
+    if (!API) return;
+    const load = () => {
+      const cfg = API.getConfig();
+      if (cfg?.platformCa) setPlatformCa(cfg.platformCa);
+      else API.probe().then((c) => setPlatformCa(c?.platformCa || ""));
+    };
+    load();
+    const onUpdate = (e) => setPlatformCa(e.detail || "");
+    window.addEventListener("platform-ca-updated", onUpdate);
+    return () => window.removeEventListener("platform-ca-updated", onUpdate);
+  }, []);
+
+  async function copyCa() {
+    if (!platformCa) return;
+    try {
+      await navigator.clipboard.writeText(platformCa);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1600);
+    } catch (_) {
+      /* ignore */
+    }
+  }
+
+  const caLabel = platformCa
+    ? platformCa.length > 16
+      ? platformCa.slice(0, 6) + "…" + platformCa.slice(-4)
+      : platformCa
+    : "";
+
   return (
     <footer className="ftr">
       <div className="wrap-wide ftr-row">
@@ -255,8 +289,20 @@ function Footer({ now }) {
           <span>UPLINK: <span style={{color:"var(--accent)"}}>STABLE</span></span>
           <span>UPTIME: {N.uptimeShort(dep)}</span>
         </div>
+        {platformCa ? (
+          <button
+            type="button"
+            className="ftr-ca swap"
+            onClick={copyCa}
+            title={copied ? "Copied" : "Click to copy contract address"}
+          >
+            {copied ? "COPIED" : `CA · ${caLabel}`}
+          </button>
+        ) : (
+          <span aria-hidden="true" />
+        )}
         <div className="ftr-status">
-          <span>NETWORK</span>
+          <span>$MITOSIS</span>
           <span>v0.1.0-alpha</span>
           <span>build 4f2c1a</span>
         </div>

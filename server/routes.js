@@ -14,6 +14,8 @@ import {
   syncProjectMetrics,
   syncAllProjectMetrics,
   hasDatabase,
+  getPlatformCa,
+  setPlatformCa,
 } from "./db.js";
 import { isAlchemyConfigured } from "./metrics.js";
 import { publicUrl } from "./upload.js";
@@ -53,12 +55,19 @@ export function createApiRouter() {
     });
   });
 
-  api.get("/config", (_req, res) => {
-    res.json({
-      aiEnabled: isAiConfigured(),
-      database: hasDatabase() ? "postgres" : "memory",
-      metricsEnabled: isAlchemyConfigured(),
-    });
+  api.get("/config", async (_req, res) => {
+    try {
+      const platformCa = await getPlatformCa();
+      res.json({
+        aiEnabled: isAiConfigured(),
+        database: hasDatabase() ? "postgres" : "memory",
+        metricsEnabled: isAlchemyConfigured(),
+        platformCa,
+      });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: "failed to load config" });
+    }
   });
 
   api.post("/admin/login", (req, res) => {
@@ -76,6 +85,20 @@ export function createApiRouter() {
     const token = auth.startsWith("Bearer ") ? auth.slice(7) : req.headers["x-admin-token"];
     sessions.delete(token);
     res.json({ ok: true });
+  });
+
+  api.patch("/admin/settings", requireAdmin, async (req, res) => {
+    try {
+      const { platformCa } = req.body || {};
+      if (platformCa !== undefined) {
+        const saved = await setPlatformCa(platformCa);
+        return res.json({ platformCa: saved });
+      }
+      res.status(400).json({ error: "no settings provided" });
+    } catch (err) {
+      console.error(err);
+      res.status(400).json({ error: err.message || "failed to save settings" });
+    }
   });
 
   api.post("/admin/generate", requireAdmin, async (req, res) => {

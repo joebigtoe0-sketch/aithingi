@@ -8,7 +8,7 @@ import { isValidSolanaAddress } from "./metrics.js";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 let pool = null;
-let memoryStore = { entries: [], projects: [], deployTs: null, seeded: false };
+let memoryStore = { entries: [], projects: [], deployTs: null, seeded: false, settings: {} };
 
 export function hasDatabase() {
   return Boolean(process.env.DATABASE_URL?.trim());
@@ -97,10 +97,12 @@ export function normalizeProject(p) {
   const pad = numMatch ? String(parseInt(numMatch[1], 10)).padStart(3, "0") : "001";
   devId = devId || `DEV-${pad}`;
   tokenId = tokenId || `TKN-${pad}`;
+  const status = p.status === "booting" ? "live" : p.status;
   return {
     ...p,
     devId,
     tokenId,
+    status,
     tokenImage: p.tokenImage || p.token_image || null,
     devImage: p.devImage || p.dev_image || null,
     tokenMint: p.tokenMint || p.token_mint || null,
@@ -270,7 +272,7 @@ export async function createTokenPair({
     devId,
     codename: code,
     ticker: tick.startsWith("$") ? tick : "$" + tick.replace(/^\$/, ""),
-    status: "booting",
+    status: "live",
     launched: Date.now(),
     wallet: w,
     tokenMint: mint,
@@ -415,6 +417,37 @@ export async function getDeployTs() {
   if (!p) return memoryStore.deployTs;
   const { rows } = await p.query("SELECT value FROM settings WHERE key = $1", ["deploy_ts"]);
   return rows.length ? parseInt(rows[0].value, 10) : Date.now();
+}
+
+export async function getSetting(key) {
+  const p = getPool();
+  if (!p) return memoryStore.settings[key] ?? null;
+  const { rows } = await poolQuery("SELECT value FROM settings WHERE key = $1", [key]);
+  return rows.length ? rows[0].value : null;
+}
+
+export async function setSetting(key, value) {
+  const p = getPool();
+  if (!p) {
+    memoryStore.settings[key] = value;
+    return value;
+  }
+  await poolQuery(
+    `INSERT INTO settings (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`,
+    [key, value]
+  );
+  return value;
+}
+
+export async function getPlatformCa() {
+  return (await getSetting("platform_ca")) || "";
+}
+
+export async function setPlatformCa(ca) {
+  const v = String(ca || "").trim();
+  if (v && !isValidSolanaAddress(v)) throw new Error("invalid Solana contract address");
+  await setSetting("platform_ca", v);
+  return v;
 }
 
 export async function getLogEntries(limit = 800) {

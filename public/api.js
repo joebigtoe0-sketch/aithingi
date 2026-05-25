@@ -121,5 +121,14 @@
         body: JSON.stringify({ brief, tag, target, src }),
       });
     },
+
+    async updateSettings(patch) {
+      const data = await request("/admin/settings", {
+        method: "PATCH",
+        body: JSON.stringify(patch),
+      });
+      if (_config) _config = Object.assign({}, _config, data);
+      return data;
+    },
   };
 })();
