@@ -468,31 +468,30 @@ function BubbleMap({ entries, now, projectsTick }) {
     try { e.currentTarget.releasePointerCapture(e.pointerId); } catch (err) {}
   }, []);
 
-  // Layout: place tokens on a circle around center, with arc-distance scaled.
-  // Place each token's agents in a small arc on the outside of the token,
-  // facing away from center.
+  // Layout: tokens on a ring around center; dev sits inward (toward center);
+  // contractors fan outward on an arc so they never stack on the dev node.
   function tokenPos(i, n) {
-    const angle = (Math.PI * 2 * i) / n - Math.PI / 2; // start at top
-    // radius is a vh-dependent value; compute via CSS calc cannot, so use %.
-    const R = 32; // % of half min dimension
+    const angle = (Math.PI * 2 * i) / n - Math.PI / 2;
+    const R = 32;
     return { x: 50 + Math.cos(angle) * R, y: 50 + Math.sin(angle) * R, angle };
   }
   function devPos(parentAngle, tokenX, tokenY) {
-    const r = 10;
-    return {
-      x: tokenX + Math.cos(parentAngle) * r,
-      y: tokenY + Math.sin(parentAngle) * r,
-    };
-  }
-  function agentPos(parentAngle, j, total, parentX, parentY) {
-    const arcWidth = Math.PI * 0.85;
-    const start = parentAngle - arcWidth / 2;
-    const step = total === 1 ? 0 : arcWidth / (total - 1);
-    const a = total === 1 ? parentAngle + 0.35 : start + step * j;
     const r = 12;
     return {
-      x: parentX + Math.cos(a) * r,
-      y: parentY + Math.sin(a) * r,
+      x: tokenX - Math.cos(parentAngle) * r,
+      y: tokenY - Math.sin(parentAngle) * r,
+    };
+  }
+  function agentPos(parentAngle, j, total, tokenX, tokenY) {
+    const arcWidth = Math.min(Math.PI * 0.85, Math.PI * 0.4 * Math.max(total, 2));
+    const outward = parentAngle;
+    const start = outward - arcWidth / 2;
+    const step = total <= 1 ? 0 : arcWidth / (total - 1);
+    const a = total === 1 ? outward + 0.55 : start + step * j;
+    const r = 14;
+    return {
+      x: tokenX + Math.cos(a) * r,
+      y: tokenY + Math.sin(a) * r,
     };
   }
 
