@@ -234,7 +234,6 @@ function Header({ path, activeAgents, liveTokens }) {
           <NavLink to="/console"  label="Console"  active={path === "/console"} />
           <NavLink to="/cast"     label="Cast"     active={path === "/cast"} />
           <NavLink to="/manifest" label="Manifest" active={path === "/manifest"} />
-          <NavLink to="/admin"    label="Admin"    active={path === "/admin"} />
         </nav>
         <div className="hdr-status">
           <span><span className="sq ok"></span>STREAMING</span>
